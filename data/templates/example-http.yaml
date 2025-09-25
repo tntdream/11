@@ -1,0 +1,15 @@
+id: example-http-service
+info:
+  name: Example HTTP Banner Check
+  author: waverly
+  severity: info
+  description: Example nuclei template used for demonstration.
+  tags: demo,example
+http:
+  - method: GET
+    path:
+      - '{{BaseURL}}'
+    matchers:
+      - type: word
+        words:
+          - Example Domain
