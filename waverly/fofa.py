@@ -42,6 +42,9 @@ class FofaResult:
         return self.data.get(item, default)
 
 
+from .constants import FOFA_MAX_PAGE_SIZE, FOFA_MIN_PAGE_SIZE
+
+
 class FofaClient:
     """Light-weight FOFA API client wrapper."""
 
@@ -82,6 +85,11 @@ class FofaClient:
         fields: Optional[Iterable[str]] = None,
     ) -> List[FofaResult]:
         """Execute a search and return normalized results."""
+
+        if size < FOFA_MIN_PAGE_SIZE or size > FOFA_MAX_PAGE_SIZE:
+            raise ValueError(
+                f"FOFA 查询数量必须在 {FOFA_MIN_PAGE_SIZE}-{FOFA_MAX_PAGE_SIZE} 之间"
+            )
 
         url = f"{self.base_url}/search/all"
         payload = {

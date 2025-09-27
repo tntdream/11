@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
+from .constants import FOFA_MAX_PAGE_SIZE, FOFA_MIN_PAGE_SIZE
+
 CONFIG_DIR = Path.home() / ".waverly"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
@@ -70,6 +72,11 @@ class UserConfig:
     templates_dir: Path = field(default_factory=lambda: CONFIG_DIR / "templates")
     cache_dir: Path = field(default_factory=lambda: CONFIG_DIR / "cache")
     config_path: Path = field(default_factory=lambda: CONFIG_FILE)
+
+    def __post_init__(self) -> None:
+        self.default_query_size = max(
+            FOFA_MIN_PAGE_SIZE, min(self.default_query_size, FOFA_MAX_PAGE_SIZE)
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)

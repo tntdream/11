@@ -4,6 +4,7 @@ from typing import Any, Iterable, List
 
 import pytest
 
+from waverly.constants import FOFA_MAX_PAGE_SIZE, FOFA_MIN_PAGE_SIZE
 from waverly.fofa import FofaClient, FofaError, FofaResult
 
 
@@ -66,3 +67,11 @@ def test_http_error_raises() -> None:
     client = FofaClient("user@example.com", "secret", session=session)
     with pytest.raises(FofaError):
         client.search("app=\"nginx\"")
+
+
+def test_rejects_invalid_page_sizes() -> None:
+    client = FofaClient("user@example.com", "secret", session=DummySession([]))
+    with pytest.raises(ValueError):
+        client.search("app=\"nginx\"", size=FOFA_MAX_PAGE_SIZE + 1)
+    with pytest.raises(ValueError):
+        client.search("app=\"nginx\"", size=FOFA_MIN_PAGE_SIZE - 1)
