@@ -145,6 +145,10 @@ class FofaClient:
 def extract_hosts(results: Iterable[FofaResult]) -> List[str]:
     hosts: List[str] = []
     for result in results:
+        url = result.get("url")
+        if url:
+            hosts.append(str(url))
+            continue
         host = result.get("host") or result.get("ip")
         if host:
             hosts.append(str(host))

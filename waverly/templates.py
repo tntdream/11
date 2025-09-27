@@ -229,6 +229,8 @@ def build_basic_template(
     method: str,
     path: str,
     matcher_words: Iterable[str],
+    *,
+    raw_request: Optional[str] = None,
 ) -> str:
     words = list(matcher_words)
     word_lines = "\n".join(f"          - {_quote(word)}" for word in words) or "          - success"
@@ -249,6 +251,10 @@ def build_basic_template(
         "        words:",
         word_lines,
     ]
+    if raw_request:
+        lines.extend(["    raw:", "      - |"])
+        for raw_line in raw_request.splitlines():
+            lines.append(f"        {raw_line}")
     return "\n".join(lines)
 
 

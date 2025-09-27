@@ -1,4 +1,4 @@
-from pathlib import Path
+import json
 
 import pytest
 
@@ -16,6 +16,7 @@ def test_load_config_creates_defaults(tmp_path):
     config_path = tmp_path / "config.json"
     config = load_config(config_path)
     assert config.fofa_fields
+    assert "url" in config.fofa_fields
     assert config.templates_dir.exists()
     assert config.cache_dir.exists()
     assert config.config_path == config_path
@@ -43,6 +44,21 @@ def test_update_config_accepts_proxy_dict(tmp_path):
     config = load_config(config_path)
     update_config(config, proxy={"http": "http://127.0.0.1:8080"})
     assert config.proxy.http == "http://127.0.0.1:8080"
+
+
+def test_load_config_backfills_url_field(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "fofa_fields": ["host", "ip"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_config(config_path)
+    assert config.fofa_fields[0] == "url"
+    assert "host" in config.fofa_fields
 
 
 @pytest.mark.parametrize(

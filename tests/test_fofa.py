@@ -4,7 +4,7 @@ from typing import Any, Iterable, List
 
 import pytest
 
-from waverly.fofa import FofaClient, FofaError, FofaResult
+from waverly.fofa import FofaClient, FofaError, FofaResult, extract_hosts
 
 
 class DummyResponse:
@@ -72,3 +72,11 @@ def test_allows_large_page_size() -> None:
     payload = {"error": False, "results": [["example.com"]], "queryfield": ["host"]}
     client = build_client(payload)
     assert client.search("app=\"nginx\"", size=10000)
+
+
+def test_extract_hosts_prefers_url() -> None:
+    results = [
+        FofaResult({"url": "https://example.com"}),
+        FofaResult({"host": "host-only"}),
+    ]
+    assert extract_hosts(results) == ["https://example.com", "host-only"]

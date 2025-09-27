@@ -108,12 +108,14 @@ class WaverlyApp(tk.Tk):
         self.fofa_tree = ttk.Treeview(frame, columns=columns, show="headings", height=7)
         for column in columns:
             self.fofa_tree.heading(column, text=column)
-            self.fofa_tree.column(column, width=120, stretch=True)
+            width = 220 if column == "url" else 120
+            self.fofa_tree.column(column, width=width, stretch=True)
         self.fofa_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
 
         action_row = ttk.Frame(frame)
         action_row.pack(fill=tk.X, padx=10, pady=(0, 5))
         ttk.Button(action_row, text="添加选中到扫描目标", command=self._append_selected_to_targets).pack(side=tk.LEFT)
+        ttk.Button(action_row, text="导入全部结果", command=self._append_all_to_targets).pack(side=tk.LEFT, padx=5)
         ttk.Button(action_row, text="导出结果为Excel", command=self._export_fofa_results).pack(side=tk.LEFT, padx=5)
 
     def _build_scan_section(self, parent: ttk.Frame) -> None:
@@ -204,17 +206,21 @@ class WaverlyApp(tk.Tk):
         self.result_tree.bind("<<TreeviewSelect>>", self._on_result_selected)
         self.result_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
 
+        result_actions = ttk.Frame(frame)
+        result_actions.pack(fill=tk.X, padx=10, pady=(0, 5))
+        ttk.Button(result_actions, text="查看请求/响应", command=self._show_result_http_details).pack(side=tk.LEFT)
+
         self.result_detail = tk.Text(frame, height=8)
         self.result_detail.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
     def _build_templates_tab(self) -> None:
-        container = ttk.Panedwindow(self.templates_frame, orient=tk.VERTICAL)
+        container = ttk.Panedwindow(self.templates_frame, orient=tk.HORIZONTAL)
         container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         list_panel = ttk.Frame(container)
         detail_panel = ttk.Frame(container)
-        container.add(list_panel, weight=3)
-        container.add(detail_panel, weight=2)
+        container.add(list_panel, weight=2)
+        container.add(detail_panel, weight=3)
 
         toolbar = ttk.Frame(list_panel)
         toolbar.pack(fill=tk.X, pady=(0, 5))
@@ -266,45 +272,24 @@ class WaverlyApp(tk.Tk):
         x_scroll.grid(row=1, column=0, sticky="ew")
         self.manage_template_tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
 
-        info_frame = ttk.Labelframe(detail_panel, text="模板信息")
-        info_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
+        self.template_notebook = ttk.Notebook(detail_panel)
+        self.template_notebook.pack(fill=tk.BOTH, expand=True)
 
-        self.template_name_var = tk.StringVar()
-        self.template_id_var = tk.StringVar()
-        self.template_severity_var = tk.StringVar()
-        self.template_author_var = tk.StringVar()
-        self.template_tags_var = tk.StringVar()
-        self.template_path_var = tk.StringVar()
-        self.template_description_var = tk.StringVar()
+        self.template_editor_tab = ttk.Frame(self.template_notebook)
+        self.template_builder_tab = ttk.Frame(self.template_notebook)
+        self.template_notebook.add(self.template_editor_tab, text="模板编辑")
+        self.template_notebook.add(self.template_builder_tab, text="POC 生成器")
 
-        ttk.Label(info_frame, text="名称:").grid(row=0, column=0, sticky="w", padx=5, pady=2)
-        ttk.Label(info_frame, textvariable=self.template_name_var).grid(row=0, column=1, sticky="w", padx=5, pady=2)
-        ttk.Label(info_frame, text="等级:").grid(row=0, column=2, sticky="w", padx=5, pady=2)
-        ttk.Label(info_frame, textvariable=self.template_severity_var).grid(row=0, column=3, sticky="w", padx=5, pady=2)
+        editor_split = ttk.Panedwindow(self.template_editor_tab, orient=tk.HORIZONTAL)
+        editor_split.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(info_frame, text="模板ID:").grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        ttk.Label(info_frame, textvariable=self.template_id_var).grid(row=1, column=1, sticky="w", padx=5, pady=2)
-        ttk.Label(info_frame, text="作者:").grid(row=1, column=2, sticky="w", padx=5, pady=2)
-        ttk.Label(info_frame, textvariable=self.template_author_var).grid(row=1, column=3, sticky="w", padx=5, pady=2)
+        editor_panel = ttk.Frame(editor_split)
+        metadata_panel = ttk.Frame(editor_split, padding=10)
+        editor_split.add(editor_panel, weight=3)
+        editor_split.add(metadata_panel, weight=2)
 
-        ttk.Label(info_frame, text="标签:").grid(row=2, column=0, sticky="nw", padx=5, pady=2)
-        ttk.Label(info_frame, textvariable=self.template_tags_var, wraplength=460, justify=tk.LEFT).grid(row=2, column=1, sticky="w", padx=5, pady=2)
-        ttk.Label(info_frame, text="路径:").grid(row=2, column=2, sticky="nw", padx=5, pady=2)
-        ttk.Label(info_frame, textvariable=self.template_path_var, wraplength=260, justify=tk.LEFT).grid(row=2, column=3, sticky="w", padx=5, pady=2)
-
-        ttk.Label(info_frame, text="描述:").grid(row=3, column=0, sticky="nw", padx=5, pady=2)
-        self.template_description_label = ttk.Label(
-            info_frame,
-            textvariable=self.template_description_var,
-            wraplength=720,
-            justify=tk.LEFT,
-        )
-        self.template_description_label.grid(row=3, column=1, columnspan=3, sticky="we", padx=5, pady=2)
-        info_frame.columnconfigure(1, weight=1)
-        info_frame.columnconfigure(3, weight=1)
-
-        editor_controls = ttk.Frame(detail_panel)
-        editor_controls.pack(fill=tk.X, padx=5)
+        editor_controls = ttk.Frame(editor_panel)
+        editor_controls.pack(fill=tk.X, padx=10, pady=(10, 5))
         ttk.Label(editor_controls, text="主题").pack(side=tk.LEFT)
         self.editor_theme_var = tk.StringVar(value="light")
         theme_box = ttk.Combobox(editor_controls, values=["light", "dark"], textvariable=self.editor_theme_var, width=8)
@@ -319,12 +304,64 @@ class WaverlyApp(tk.Tk):
 
         ttk.Button(editor_controls, text="保存模板", command=self._save_template_changes).pack(side=tk.RIGHT)
 
-        self.editor_text = tk.Text(detail_panel, wrap=tk.NONE)
-        self.editor_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=(5, 5))
-        self._apply_editor_theme()
+        editor_text_frame = ttk.Frame(editor_panel)
+        editor_text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        self.editor_text = tk.Text(editor_text_frame, wrap=tk.NONE)
+        self.editor_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        editor_y_scroll = ttk.Scrollbar(editor_text_frame, orient=tk.VERTICAL, command=self.editor_text.yview)
+        editor_y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        editor_x_scroll = ttk.Scrollbar(editor_panel, orient=tk.HORIZONTAL, command=self.editor_text.xview)
+        editor_x_scroll.pack(fill=tk.X, padx=10, pady=(0, 10))
+        self.editor_text.configure(yscrollcommand=editor_y_scroll.set, xscrollcommand=editor_x_scroll.set)
 
-        builder_frame = ttk.Labelframe(detail_panel, text="POC 快速生成")
-        builder_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
+        self.template_name_var = tk.StringVar()
+        self.template_id_var = tk.StringVar()
+        self.template_severity_var = tk.StringVar()
+        self.template_author_var = tk.StringVar()
+        self.template_tags_var = tk.StringVar()
+        self.template_path_var = tk.StringVar()
+        self.template_description_var = tk.StringVar()
+
+        info_frame = ttk.LabelFrame(metadata_panel, text="基础信息")
+        info_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(info_frame, text="名称").grid(row=0, column=0, sticky="w", padx=5, pady=4)
+        ttk.Label(info_frame, textvariable=self.template_name_var).grid(row=0, column=1, sticky="w", padx=5, pady=4)
+        ttk.Label(info_frame, text="等级").grid(row=0, column=2, sticky="w", padx=5, pady=4)
+        ttk.Label(info_frame, textvariable=self.template_severity_var).grid(row=0, column=3, sticky="w", padx=5, pady=4)
+
+        ttk.Label(info_frame, text="模板 ID").grid(row=1, column=0, sticky="w", padx=5, pady=4)
+        ttk.Label(info_frame, textvariable=self.template_id_var).grid(row=1, column=1, sticky="w", padx=5, pady=4)
+        ttk.Label(info_frame, text="作者").grid(row=1, column=2, sticky="w", padx=5, pady=4)
+        ttk.Label(info_frame, textvariable=self.template_author_var).grid(row=1, column=3, sticky="w", padx=5, pady=4)
+
+        info_frame.columnconfigure(1, weight=1)
+        info_frame.columnconfigure(3, weight=1)
+
+        tags_frame = ttk.LabelFrame(metadata_panel, text="标签")
+        tags_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(tags_frame, textvariable=self.template_tags_var, wraplength=260, justify=tk.LEFT).pack(anchor=tk.W, padx=5, pady=4)
+
+        path_frame = ttk.LabelFrame(metadata_panel, text="路径")
+        path_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(path_frame, textvariable=self.template_path_var, wraplength=260, justify=tk.LEFT).pack(anchor=tk.W, padx=5, pady=4)
+
+        description_frame = ttk.LabelFrame(metadata_panel, text="描述")
+        description_frame.pack(fill=tk.BOTH, expand=True)
+        self.template_description_label = ttk.Label(
+            description_frame,
+            textvariable=self.template_description_var,
+            wraplength=260,
+            justify=tk.LEFT,
+        )
+        self.template_description_label.pack(fill=tk.BOTH, expand=True, padx=5, pady=4)
+
+        builder_container = ttk.Panedwindow(self.template_builder_tab, orient=tk.HORIZONTAL)
+        builder_container.pack(fill=tk.BOTH, expand=True)
+
+        builder_form = ttk.Frame(builder_container, padding=10)
+        builder_preview = ttk.Frame(builder_container, padding=10)
+        builder_container.add(builder_form, weight=2)
+        builder_container.add(builder_preview, weight=3)
 
         self.builder_id = tk.StringVar()
         self.builder_name = tk.StringVar()
@@ -332,23 +369,57 @@ class WaverlyApp(tk.Tk):
         self.builder_method = tk.StringVar(value="GET")
         self.builder_path = tk.StringVar(value="/")
         self.builder_words = tk.StringVar(value="success")
+        self.builder_use_raw = tk.BooleanVar(value=False)
 
-        ttk.Label(builder_frame, text="模板 ID").grid(row=0, column=0, sticky="w")
-        ttk.Entry(builder_frame, textvariable=self.builder_id, width=20).grid(row=0, column=1, padx=5, pady=2)
-        ttk.Label(builder_frame, text="名称").grid(row=0, column=2, sticky="w")
-        ttk.Entry(builder_frame, textvariable=self.builder_name, width=25).grid(row=0, column=3, padx=5, pady=2)
+        basic_frame = ttk.LabelFrame(builder_form, text="模板信息")
+        basic_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(basic_frame, text="模板 ID").grid(row=0, column=0, sticky="w", padx=5, pady=4)
+        ttk.Entry(basic_frame, textvariable=self.builder_id, width=24).grid(row=0, column=1, sticky="we", padx=5, pady=4)
+        ttk.Label(basic_frame, text="名称").grid(row=1, column=0, sticky="w", padx=5, pady=4)
+        ttk.Entry(basic_frame, textvariable=self.builder_name, width=24).grid(row=1, column=1, sticky="we", padx=5, pady=4)
+        ttk.Label(basic_frame, text="等级").grid(row=2, column=0, sticky="w", padx=5, pady=4)
+        ttk.Combobox(basic_frame, values=["info", "low", "medium", "high", "critical"], textvariable=self.builder_severity, width=22).grid(row=2, column=1, sticky="we", padx=5, pady=4)
+        basic_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(builder_frame, text="等级").grid(row=1, column=0, sticky="w")
-        ttk.Combobox(builder_frame, values=["info", "low", "medium", "high", "critical"], textvariable=self.builder_severity, width=10).grid(row=1, column=1, padx=5, pady=2)
-        ttk.Label(builder_frame, text="方法").grid(row=1, column=2, sticky="w")
-        ttk.Combobox(builder_frame, values=["GET", "POST", "PUT", "DELETE", "PATCH"], textvariable=self.builder_method, width=10).grid(row=1, column=3, padx=5, pady=2)
+        http_frame = ttk.LabelFrame(builder_form, text="HTTP 配置")
+        http_frame.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(http_frame, text="方法").grid(row=0, column=0, sticky="w", padx=5, pady=4)
+        ttk.Combobox(http_frame, values=["GET", "POST", "PUT", "DELETE", "PATCH"], textvariable=self.builder_method, width=18).grid(row=0, column=1, sticky="we", padx=5, pady=4)
+        ttk.Label(http_frame, text="路径").grid(row=1, column=0, sticky="w", padx=5, pady=4)
+        ttk.Entry(http_frame, textvariable=self.builder_path, width=24).grid(row=1, column=1, sticky="we", padx=5, pady=4)
+        ttk.Label(http_frame, text="匹配关键词").grid(row=2, column=0, sticky="w", padx=5, pady=4)
+        ttk.Entry(http_frame, textvariable=self.builder_words, width=24).grid(row=2, column=1, sticky="we", padx=5, pady=4)
 
-        ttk.Label(builder_frame, text="路径").grid(row=2, column=0, sticky="w")
-        ttk.Entry(builder_frame, textvariable=self.builder_path, width=20).grid(row=2, column=1, padx=5, pady=2)
-        ttk.Label(builder_frame, text="匹配关键词 (逗号分隔)").grid(row=2, column=2, sticky="w")
-        ttk.Entry(builder_frame, textvariable=self.builder_words, width=25).grid(row=2, column=3, padx=5, pady=2)
+        raw_toggle = ttk.Checkbutton(http_frame, text="启用 Raw 请求编辑", variable=self.builder_use_raw, command=self._toggle_builder_raw)
+        raw_toggle.grid(row=3, column=0, columnspan=2, sticky="w", padx=5, pady=(10, 4))
 
-        ttk.Button(builder_frame, text="生成并打开", command=self._build_template).grid(row=3, column=0, columnspan=4, pady=5, sticky="ew")
+        self.builder_raw_text = tk.Text(http_frame, height=12, wrap=tk.NONE, state=tk.DISABLED)
+        self.builder_raw_text.grid(row=4, column=0, columnspan=2, sticky="nsew", padx=5, pady=(0, 5))
+        raw_y_scroll = ttk.Scrollbar(http_frame, orient=tk.VERTICAL, command=self.builder_raw_text.yview)
+        raw_y_scroll.grid(row=4, column=2, sticky="ns", pady=(0, 5))
+        raw_x_scroll = ttk.Scrollbar(http_frame, orient=tk.HORIZONTAL, command=self.builder_raw_text.xview)
+        raw_x_scroll.grid(row=5, column=0, columnspan=2, sticky="ew", padx=5)
+        self.builder_raw_text.configure(yscrollcommand=raw_y_scroll.set, xscrollcommand=raw_x_scroll.set)
+        http_frame.columnconfigure(1, weight=1)
+        http_frame.rowconfigure(4, weight=1)
+
+        builder_actions = ttk.Frame(builder_form)
+        builder_actions.pack(fill=tk.X, pady=(10, 0))
+        ttk.Button(builder_actions, text="生成模板并保存", command=self._create_template_from_builder).pack(side=tk.LEFT)
+        ttk.Button(builder_actions, text="加载到编辑器", command=self._build_template).pack(side=tk.RIGHT)
+
+        preview_frame = ttk.LabelFrame(builder_preview, text="生成预览")
+        preview_frame.pack(fill=tk.BOTH, expand=True)
+        self.builder_preview_text = tk.Text(preview_frame, wrap=tk.NONE)
+        self.builder_preview_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        preview_y_scroll = ttk.Scrollbar(preview_frame, orient=tk.VERTICAL, command=self.builder_preview_text.yview)
+        preview_y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        preview_x_scroll = ttk.Scrollbar(builder_preview, orient=tk.HORIZONTAL, command=self.builder_preview_text.xview)
+        preview_x_scroll.pack(fill=tk.X, pady=(0, 10))
+        self.builder_preview_text.configure(yscrollcommand=preview_y_scroll.set, xscrollcommand=preview_x_scroll.set)
+        self.builder_preview_text.configure(state=tk.DISABLED)
+
+        self._apply_editor_theme()
 
     def _build_settings_tab(self) -> None:
         frame = ttk.Frame(self.settings_frame)
@@ -414,7 +485,8 @@ class WaverlyApp(tk.Tk):
         self.fofa_tree.config(columns=columns)
         for column in columns:
             self.fofa_tree.heading(column, text=column)
-            self.fofa_tree.column(column, width=120, stretch=True)
+            width = 220 if column == "url" else 120
+            self.fofa_tree.column(column, width=width, stretch=True)
 
     def execute_fofa_query(self) -> None:
         expression = self.fofa_query_var.get().strip()
@@ -457,24 +529,54 @@ class WaverlyApp(tk.Tk):
 
     def _append_selected_to_targets(self) -> None:
         selected = self.fofa_tree.selection()
-        hosts = []
+        indices: List[int] = []
         for item in selected:
-            idx = int(item)
+            try:
+                indices.append(int(item))
+            except (ValueError, TypeError):
+                continue
+        urls = self._collect_urls_by_indices(indices)
+        if not urls:
+            messagebox.showinfo("提示", "请选择至少一个包含 URL 的结果")
+            return
+        self._append_urls_to_targets(urls)
+
+    def _append_all_to_targets(self) -> None:
+        urls = self._collect_urls_by_indices(list(range(len(self._fofa_results))))
+        if not urls:
+            messagebox.showinfo("提示", "当前结果集中未发现 URL")
+            return
+        self._append_urls_to_targets(urls)
+
+    def _collect_urls_by_indices(self, indices: List[int]) -> List[str]:
+        urls: List[str] = []
+        seen: set[str] = set()
+        for idx in indices:
+            if idx < 0:
+                continue
             try:
                 result = self._fofa_results[idx]
             except IndexError:
                 continue
-            host = result.get("host") or result.get("ip")
-            if host:
-                hosts.append(host)
-        if not hosts:
-            messagebox.showinfo("提示", "请选择至少一个结果")
-            return
-        existing = self.targets_text.get("1.0", tk.END).strip().splitlines()
-        merged = existing + hosts
-        merged = [line for line in merged if line]
+            url = result.get("url")
+            if not url:
+                continue
+            url_str = str(url).strip()
+            if url_str and url_str not in seen:
+                urls.append(url_str)
+                seen.add(url_str)
+        return urls
+
+    def _append_urls_to_targets(self, urls: List[str]) -> None:
+        existing = [line.strip() for line in self.targets_text.get("1.0", tk.END).splitlines() if line.strip()]
+        combined: List[str] = []
+        seen = set()
+        for item in existing + urls:
+            if item and item not in seen:
+                combined.append(item)
+                seen.add(item)
         self.targets_text.delete("1.0", tk.END)
-        self.targets_text.insert(tk.END, "\n".join(sorted(set(merged))))
+        self.targets_text.insert(tk.END, "\n".join(combined))
 
     def _export_fofa_results(self) -> None:
         if not self._fofa_results:
@@ -639,6 +741,108 @@ class WaverlyApp(tk.Tk):
         self.result_detail.delete("1.0", tk.END)
         self.result_detail.insert(tk.END, payload)
 
+    def _show_result_http_details(self) -> None:
+        if not self._selected_task:
+            messagebox.showinfo("提示", "请先选择一个任务和结果条目")
+            return
+        selection = self.result_tree.selection()
+        if not selection:
+            messagebox.showinfo("提示", "请选择需要查看的结果")
+            return
+        try:
+            idx = int(selection[0])
+        except (ValueError, TypeError):
+            messagebox.showerror("错误", "无法解析结果编号")
+            return
+        try:
+            result = self._selected_task.results[idx]
+        except IndexError:
+            messagebox.showerror("错误", "未找到对应的结果")
+            return
+
+        raw_payload = result.raw if isinstance(result.raw, dict) else {}
+        request_packet = self._extract_http_packet(raw_payload, ["request", "http-request", "curl-command"])
+        response_packet = self._extract_http_packet(raw_payload, ["response", "http-response", "body"])
+
+        if not request_packet and not response_packet:
+            messagebox.showinfo("提示", "该结果未包含请求或响应数据")
+            return
+
+        dialog = tk.Toplevel(self)
+        dialog.title("请求包与响应包")
+        dialog.geometry("960x540")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        paned = ttk.Panedwindow(dialog, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        request_frame = ttk.LabelFrame(paned, text="请求包")
+        response_frame = ttk.LabelFrame(paned, text="响应包")
+        paned.add(request_frame, weight=1)
+        paned.add(response_frame, weight=1)
+
+        request_text = tk.Text(request_frame, wrap=tk.NONE)
+        request_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        request_y_scroll = ttk.Scrollbar(request_frame, orient=tk.VERTICAL, command=request_text.yview)
+        request_y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        request_x_scroll = ttk.Scrollbar(request_frame, orient=tk.HORIZONTAL, command=request_text.xview)
+        request_x_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        request_text.configure(yscrollcommand=request_y_scroll.set, xscrollcommand=request_x_scroll.set)
+        request_text.insert(tk.END, request_packet)
+
+        response_text = tk.Text(response_frame, wrap=tk.NONE)
+        response_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        response_y_scroll = ttk.Scrollbar(response_frame, orient=tk.VERTICAL, command=response_text.yview)
+        response_y_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        response_x_scroll = ttk.Scrollbar(response_frame, orient=tk.HORIZONTAL, command=response_text.xview)
+        response_x_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        response_text.configure(yscrollcommand=response_y_scroll.set, xscrollcommand=response_x_scroll.set)
+        response_text.insert(tk.END, response_packet)
+
+        action_row = ttk.Frame(dialog)
+        action_row.pack(fill=tk.X, padx=10, pady=(0, 10))
+        ttk.Button(action_row, text="关闭", command=dialog.destroy).pack(side=tk.RIGHT)
+
+        self._apply_editor_theme_to_widget(request_text)
+        self._apply_editor_theme_to_widget(response_text)
+
+    def _extract_http_packet(self, payload: dict, keys: List[str]) -> str:
+        for key in keys:
+            value = payload.get(key)
+            if value:
+                return self._format_http_packet(value)
+        return ""
+
+    def _format_http_packet(self, value: object) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (list, tuple)):
+            return "\n".join(str(item) for item in value)
+        if isinstance(value, dict):
+            return json.dumps(value, indent=2, ensure_ascii=False)
+        return str(value)
+
+    def _apply_editor_theme_to_widget(self, widget: tk.Text, preserve_state: bool = True) -> None:
+        theme = self.editor_theme_var.get()
+        font_size = self.editor_font_size.get()
+        if theme == "dark":
+            background = "#1e1e1e"
+            foreground = "#dcdcdc"
+        else:
+            background = "#ffffff"
+            foreground = "#000000"
+
+        previous_state = widget["state"] if preserve_state else tk.NORMAL
+        if preserve_state:
+            widget.configure(state=tk.NORMAL)
+
+        widget.configure(background=background, foreground=foreground, insertbackground=foreground)
+        widget.configure(font=("Courier New", font_size))
+
+        if preserve_state:
+            widget.configure(state=previous_state)
+
     # ---------------------------------------------------------------- Templates
     def _refresh_template_list(self) -> None:
         self.template_tree.delete(*self.template_tree.get_children())
@@ -730,6 +934,8 @@ class WaverlyApp(tk.Tk):
             self.template_name_var.set(template_path.stem)
             self.template_id_var.set(template_path.stem)
             self.template_path_var.set(str(template_path))
+        if hasattr(self, "template_notebook") and hasattr(self, "template_editor_tab"):
+            self.template_notebook.select(self.template_editor_tab)
         try:
             content = template_path.read_text(encoding="utf-8")
         except Exception as exc:
@@ -738,6 +944,7 @@ class WaverlyApp(tk.Tk):
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert(tk.END, content)
         self.editor_text.edit_reset()
+        self._update_builder_preview(content)
 
     def _update_template_info(self, metadata: TemplateMetadata) -> None:
         self.template_name_var.set(metadata.name)
@@ -758,6 +965,7 @@ class WaverlyApp(tk.Tk):
         self.template_tags_var.set("")
         self.template_path_var.set("")
         self.template_description_var.set("")
+        self._update_builder_preview("")
 
     def _get_template_metadata_by_path(self, template_path: Path) -> Optional[TemplateMetadata]:
         for template in self._template_cache:
@@ -817,7 +1025,16 @@ class WaverlyApp(tk.Tk):
         method = self.builder_method.get() or "GET"
         path_value = self.builder_path.get() or "/"
         words = [word.strip() for word in self.builder_words.get().split(",") if word.strip()]
-        body = build_basic_template(template_id, name, severity, method, path_value, words)
+        raw_request = self._get_builder_raw_request()
+        body = build_basic_template(
+            template_id,
+            name,
+            severity,
+            method,
+            path_value,
+            words,
+            raw_request=raw_request,
+        )
         try:
             self.template_manager.create_template(name, severity, words, body, template_id=template_id)
         except TemplateError as exc:
@@ -826,6 +1043,7 @@ class WaverlyApp(tk.Tk):
         self._refresh_template_list()
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert(tk.END, body)
+        self._update_builder_preview(body)
         messagebox.showinfo("提示", "模板已生成")
 
     def _build_template(self) -> None:
@@ -835,18 +1053,54 @@ class WaverlyApp(tk.Tk):
         method = self.builder_method.get() or "GET"
         path_value = self.builder_path.get() or "/"
         words = [word.strip() for word in self.builder_words.get().split(",") if word.strip()]
-        body = build_basic_template(template_id, name, severity, method, path_value, words)
+        raw_request = self._get_builder_raw_request()
+        body = build_basic_template(
+            template_id,
+            name,
+            severity,
+            method,
+            path_value,
+            words,
+            raw_request=raw_request,
+        )
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert(tk.END, body)
+        self._update_builder_preview(body)
+
+    def _toggle_builder_raw(self) -> None:
+        state = tk.NORMAL if self.builder_use_raw.get() else tk.DISABLED
+        self.builder_raw_text.configure(state=tk.NORMAL)
+        if state == tk.DISABLED:
+            self.builder_raw_text.delete("1.0", tk.END)
+        self.builder_raw_text.configure(state=state)
+        self._apply_editor_theme_to_widget(self.builder_raw_text)
+
+    def _get_builder_raw_request(self) -> Optional[str]:
+        if not getattr(self, "builder_use_raw", None):
+            return None
+        if not self.builder_use_raw.get():
+            return None
+        raw = self.builder_raw_text.get("1.0", tk.END).strip()
+        return raw or None
+
+    def _update_builder_preview(self, content: str) -> None:
+        if not hasattr(self, "builder_preview_text"):
+            return
+        previous_state = self.builder_preview_text["state"]
+        self.builder_preview_text.configure(state=tk.NORMAL)
+        self.builder_preview_text.delete("1.0", tk.END)
+        if content:
+            self.builder_preview_text.insert(tk.END, content)
+        self.builder_preview_text.configure(state=previous_state or tk.NORMAL)
 
     def _apply_editor_theme(self) -> None:
-        theme = self.editor_theme_var.get()
-        font_size = self.editor_font_size.get()
-        if theme == "dark":
-            self.editor_text.configure(background="#1e1e1e", foreground="#dcdcdc", insertbackground="#ffffff")
-        else:
-            self.editor_text.configure(background="#ffffff", foreground="#000000", insertbackground="#000000")
-        self.editor_text.configure(font=("Courier New", font_size))
+        self._apply_editor_theme_to_widget(self.editor_text, preserve_state=False)
+
+        if hasattr(self, "builder_preview_text"):
+            self._apply_editor_theme_to_widget(self.builder_preview_text)
+
+        if hasattr(self, "builder_raw_text"):
+            self._apply_editor_theme_to_widget(self.builder_raw_text)
 
     # ---------------------------------------------------------------- Settings
     def _load_settings_into_ui(self) -> None:

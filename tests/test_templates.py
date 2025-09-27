@@ -43,3 +43,18 @@ def test_import_templates_skips_duplicates(tmp_path):
     assert len(imported_again) == 0
 
 
+def test_build_basic_template_supports_raw_block():
+    raw = "GET / HTTP/1.1\nHost: example.com"
+    body = build_basic_template(
+        template_id="demo",
+        name="Demo",
+        severity="medium",
+        method="GET",
+        path="/",
+        matcher_words=["ok"],
+        raw_request=raw,
+    )
+    assert "raw:" in body
+    assert "GET / HTTP/1.1" in body
+
+

@@ -56,7 +56,15 @@ class UserConfig:
     fofa_email: str = ""
     fofa_key: str = ""
     fofa_fields: list[str] = field(
-        default_factory=lambda: ["host", "ip", "port", "title", "server", "banner"]
+        default_factory=lambda: [
+            "url",
+            "host",
+            "ip",
+            "port",
+            "title",
+            "server",
+            "banner",
+        ]
     )
     default_query_size: int = 100
     dnslog_server: str = ""
@@ -86,7 +94,11 @@ class UserConfig:
         config = cls(
             fofa_email=data.get("fofa_email", ""),
             fofa_key=data.get("fofa_key", ""),
-            fofa_fields=list(data.get("fofa_fields", [])) or cls().fofa_fields,
+            fofa_fields=(
+                merge_fields(cls().fofa_fields, list(data.get("fofa_fields", [])))
+                if data.get("fofa_fields")
+                else cls().fofa_fields
+            ),
             default_query_size=int(data.get("default_query_size", 100)),
             dnslog_server=data.get("dnslog_server", ""),
             dnslog_token=data.get("dnslog_token", ""),
