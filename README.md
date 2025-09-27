@@ -34,6 +34,14 @@ pip install -r requirements.txt
 python -m waverly
 ```
 
+若在 Linux 服务器等无图形界面的环境中运行，可先执行：
+
+```bash
+python -m waverly --check
+```
+
+以确认是否已提供可用的 DISPLAY；如未检测到，将给出友好的提示信息。
+
 首次运行会在用户目录下生成 `~/.waverly/` 目录，用于持久化配置、缓存与模板。可在“系统设置”页调整模板目录后重新加载。
 
 ## 代码结构
