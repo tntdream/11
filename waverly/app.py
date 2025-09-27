@@ -6,7 +6,6 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import List, Optional
 
-from . import constants
 from .config import UserConfig, load_config, save_config
 from .fofa import FofaClient, FofaError, FofaResult, RequestError
 from .nuclei import NucleiTask
@@ -89,8 +88,7 @@ class WaverlyApp(tk.Tk):
         self.fofa_size_var = tk.IntVar(value=self.config_data.default_query_size)
         size_spin = ttk.Spinbox(
             query_row,
-            from_=constants.FOFA_MIN_PAGE_SIZE,
-            to=constants.FOFA_MAX_PAGE_SIZE,
+            from_=1,
             textvariable=self.fofa_size_var,
             width=6,
         )
