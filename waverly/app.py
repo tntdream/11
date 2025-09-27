@@ -1,0 +1,713 @@
+from __future__ import annotations
+
+import json
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+from typing import List, Optional
+
+from .config import UserConfig, load_config, save_config
+from .fofa import FofaClient, FofaError, FofaResult, RequestError
+from .nuclei import NucleiTask
+from .tasks import TaskManager
+from .templates import TemplateError, TemplateManager, build_basic_template
+from .utils import export_results_to_excel, format_timestamp, write_table_to_excel
+
+
+class WaverlyApp(tk.Tk):
+    """Main Tkinter GUI application."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("Waverly - FOFA & Nuclei Orchestrator")
+        self.geometry("1280x840")
+        self.minsize(1100, 720)
+
+        self.config_data: UserConfig = load_config()
+        self.template_manager = TemplateManager(self.config_data.templates_dir)
+        self.task_manager = TaskManager()
+        self.task_manager.add_listener(self._schedule_task_update)
+
+        self.fofa_client: Optional[FofaClient] = None
+        self._fofa_results: List[FofaResult] = []
+        self._selected_task: Optional[NucleiTask] = None
+        self._tasks_cache: dict[str, NucleiTask] = {}
+
+        self._build_ui()
+        self._refresh_template_list()
+        self._load_settings_into_ui()
+
+    # ------------------------------------------------------------------ UI
+    def _build_ui(self) -> None:
+        self.style = ttk.Style(self)
+        try:
+            self.style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.dashboard_frame = ttk.Frame(self.notebook)
+        self.templates_frame = ttk.Frame(self.notebook)
+        self.settings_frame = ttk.Frame(self.notebook)
+
+        self.notebook.add(self.dashboard_frame, text="资产与扫描")
+        self.notebook.add(self.templates_frame, text="模板管理")
+        self.notebook.add(self.settings_frame, text="系统设置")
+
+        self._build_dashboard()
+        self._build_templates_tab()
+        self._build_settings_tab()
+
+    def _build_dashboard(self) -> None:
+        container = ttk.Panedwindow(self.dashboard_frame, orient=tk.HORIZONTAL)
+        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        left_panel = ttk.Frame(container)
+        right_panel = ttk.Frame(container)
+        container.add(left_panel, weight=3)
+        container.add(right_panel, weight=2)
+
+        self._build_fofa_section(left_panel)
+        self._build_scan_section(left_panel)
+        self._build_task_section(right_panel)
+
+    def _build_fofa_section(self, parent: ttk.Frame) -> None:
+        frame = ttk.Labelframe(parent, text="FOFA 资产搜索")
+        frame.pack(fill=tk.BOTH, expand=False, pady=(0, 10))
+
+        query_row = ttk.Frame(frame)
+        query_row.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Label(query_row, text="查询语句:").pack(side=tk.LEFT)
+        self.fofa_query_var = tk.StringVar()
+        query_entry = ttk.Entry(query_row, textvariable=self.fofa_query_var)
+        query_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+
+        ttk.Label(query_row, text="返回数量:").pack(side=tk.LEFT)
+        self.fofa_size_var = tk.IntVar(value=self.config_data.default_query_size)
+        size_spin = ttk.Spinbox(query_row, from_=1, to=10000, textvariable=self.fofa_size_var, width=6)
+        size_spin.pack(side=tk.LEFT, padx=(5, 0))
+        ttk.Button(query_row, text="执行查询", command=self.execute_fofa_query).pack(side=tk.LEFT, padx=5)
+
+        fields_row = ttk.Frame(frame)
+        fields_row.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Label(fields_row, text="字段 (逗号分隔):").pack(side=tk.LEFT)
+        self.fofa_fields_var = tk.StringVar(value=",".join(self.config_data.fofa_fields))
+        fields_entry = ttk.Entry(fields_row, textvariable=self.fofa_fields_var)
+        fields_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 5))
+        ttk.Button(fields_row, text="保存字段", command=self._update_fofa_fields).pack(side=tk.LEFT)
+
+        columns = self.config_data.fofa_fields
+        self.fofa_tree = ttk.Treeview(frame, columns=columns, show="headings", height=7)
+        for column in columns:
+            self.fofa_tree.heading(column, text=column)
+            self.fofa_tree.column(column, width=120, stretch=True)
+        self.fofa_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
+
+        action_row = ttk.Frame(frame)
+        action_row.pack(fill=tk.X, padx=10, pady=(0, 5))
+        ttk.Button(action_row, text="添加选中到扫描目标", command=self._append_selected_to_targets).pack(side=tk.LEFT)
+        ttk.Button(action_row, text="导出结果为Excel", command=self._export_fofa_results).pack(side=tk.LEFT, padx=5)
+
+    def _build_scan_section(self, parent: ttk.Frame) -> None:
+        frame = ttk.Labelframe(parent, text="Nuclei 扫描配置")
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        upper = ttk.Frame(frame)
+        upper.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        ttk.Label(upper, text="扫描目标 (一行一个)").pack(anchor=tk.W)
+        self.targets_text = tk.Text(upper, height=6)
+        self.targets_text.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+
+        template_frame = ttk.Frame(upper)
+        template_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        ttk.Label(template_frame, text="选择模板").pack(anchor=tk.W)
+        columns = ("severity", "tags")
+        self.template_tree = ttk.Treeview(template_frame, columns=columns, show="headings", selectmode="extended", height=6)
+        self.template_tree.heading("severity", text="等级")
+        self.template_tree.heading("tags", text="标签")
+        self.template_tree.column("severity", width=80, anchor=tk.CENTER)
+        self.template_tree.column("tags", width=200, anchor=tk.W)
+        self.template_tree.pack(fill=tk.BOTH, expand=True)
+
+        options_frame = ttk.Frame(frame)
+        options_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        self.rate_limit_var = tk.IntVar(value=self.config_data.nuclei_rate_limit)
+        self.concurrency_var = tk.IntVar(value=self.config_data.nuclei_concurrency)
+        self.severity_var = tk.StringVar(value="")
+        self.dnslog_var = tk.StringVar(value=self.config_data.dnslog_server)
+        self.proxy_var = tk.StringVar(value=self.config_data.proxy.http or "")
+
+        ttk.Label(options_frame, text="速率限制").grid(row=0, column=0, sticky="w")
+        ttk.Spinbox(options_frame, from_=1, to=1000, textvariable=self.rate_limit_var, width=8).grid(row=0, column=1, padx=5)
+        ttk.Label(options_frame, text="并发").grid(row=0, column=2, sticky="w")
+        ttk.Spinbox(options_frame, from_=1, to=500, textvariable=self.concurrency_var, width=8).grid(row=0, column=3, padx=5)
+        ttk.Label(options_frame, text="等级过滤").grid(row=0, column=4, sticky="w")
+        ttk.Combobox(options_frame, values=["", "info", "low", "medium", "high", "critical"], textvariable=self.severity_var, width=10).grid(row=0, column=5, padx=5)
+
+        ttk.Label(options_frame, text="DNSLOG 服务").grid(row=1, column=0, sticky="w", pady=(5, 0))
+        ttk.Entry(options_frame, textvariable=self.dnslog_var, width=25).grid(row=1, column=1, padx=5, pady=(5, 0))
+        ttk.Label(options_frame, text="代理").grid(row=1, column=2, sticky="w", pady=(5, 0))
+        ttk.Entry(options_frame, textvariable=self.proxy_var, width=25).grid(row=1, column=3, columnspan=3, sticky="we", padx=5, pady=(5, 0))
+
+        button_row = ttk.Frame(frame)
+        button_row.pack(fill=tk.X, padx=10, pady=(0, 5))
+        ttk.Button(button_row, text="启动扫描", command=self._start_scan).pack(side=tk.LEFT)
+        ttk.Button(button_row, text="停止扫描", command=self._stop_selected_task).pack(side=tk.LEFT, padx=5)
+
+    def _build_task_section(self, parent: ttk.Frame) -> None:
+        frame = ttk.Labelframe(parent, text="扫描任务与结果")
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        columns = ("name", "status", "progress", "results", "started", "finished")
+        self.task_tree = ttk.Treeview(frame, columns=columns, show="headings", selectmode="browse", height=10)
+        self.task_tree.heading("name", text="任务名称")
+        self.task_tree.heading("status", text="状态")
+        self.task_tree.heading("progress", text="进度")
+        self.task_tree.heading("results", text="命中数量")
+        self.task_tree.heading("started", text="开始时间")
+        self.task_tree.heading("finished", text="结束时间")
+        self.task_tree.column("name", width=140)
+        self.task_tree.column("status", width=80, anchor=tk.CENTER)
+        self.task_tree.column("progress", width=70, anchor=tk.CENTER)
+        self.task_tree.column("results", width=80, anchor=tk.CENTER)
+        self.task_tree.column("started", width=140)
+        self.task_tree.column("finished", width=140)
+        self.task_tree.bind("<<TreeviewSelect>>", self._on_task_selected)
+        self.task_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        action_row = ttk.Frame(frame)
+        action_row.pack(fill=tk.X, padx=10, pady=(0, 5))
+        ttk.Button(action_row, text="导出任务结果", command=self._export_task_results).pack(side=tk.LEFT)
+        ttk.Button(action_row, text="清理已完成", command=self._clear_finished_tasks).pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(frame, text="扫描结果详情").pack(anchor=tk.W, padx=10)
+        columns = ("template", "severity", "matched", "target")
+        self.result_tree = ttk.Treeview(frame, columns=columns, show="headings", height=6)
+        self.result_tree.heading("template", text="模板")
+        self.result_tree.heading("severity", text="等级")
+        self.result_tree.heading("matched", text="命中时间")
+        self.result_tree.heading("target", text="目标")
+        self.result_tree.column("template", width=160)
+        self.result_tree.column("severity", width=80, anchor=tk.CENTER)
+        self.result_tree.column("matched", width=160)
+        self.result_tree.column("target", width=200)
+        self.result_tree.bind("<<TreeviewSelect>>", self._on_result_selected)
+        self.result_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
+
+        self.result_detail = tk.Text(frame, height=8)
+        self.result_detail.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+
+    def _build_templates_tab(self) -> None:
+        container = ttk.Panedwindow(self.templates_frame, orient=tk.HORIZONTAL)
+        container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        left = ttk.Frame(container)
+        right = ttk.Frame(container)
+        container.add(left, weight=1)
+        container.add(right, weight=2)
+
+        ttk.Label(left, text="已导入模板").pack(anchor=tk.W)
+        columns = ("severity", "tags")
+        self.manage_template_tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
+        self.manage_template_tree.heading("severity", text="等级")
+        self.manage_template_tree.heading("tags", text="标签")
+        self.manage_template_tree.column("severity", width=80, anchor=tk.CENTER)
+        self.manage_template_tree.column("tags", width=200)
+        self.manage_template_tree.pack(fill=tk.BOTH, expand=True)
+        self.manage_template_tree.bind("<<TreeviewSelect>>", self._on_manage_template_selected)
+
+        button_row = ttk.Frame(left)
+        button_row.pack(fill=tk.X, pady=5)
+        ttk.Button(button_row, text="新建模板", command=self._create_template_from_builder).pack(side=tk.LEFT)
+        ttk.Button(button_row, text="删除", command=self._delete_selected_template).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_row, text="导入目录", command=self._import_templates_from_directory).pack(side=tk.LEFT)
+
+        editor_controls = ttk.Frame(right)
+        editor_controls.pack(fill=tk.X)
+        ttk.Label(editor_controls, text="主题").pack(side=tk.LEFT)
+        self.editor_theme_var = tk.StringVar(value="light")
+        theme_box = ttk.Combobox(editor_controls, values=["light", "dark"], textvariable=self.editor_theme_var, width=8)
+        theme_box.pack(side=tk.LEFT, padx=5)
+        theme_box.bind("<<ComboboxSelected>>", lambda _event: self._apply_editor_theme())
+
+        ttk.Label(editor_controls, text="字体大小").pack(side=tk.LEFT)
+        self.editor_font_size = tk.IntVar(value=12)
+        font_spin = ttk.Spinbox(editor_controls, from_=8, to=22, textvariable=self.editor_font_size, width=5)
+        font_spin.pack(side=tk.LEFT)
+        font_spin.bind("<FocusOut>", lambda _event: self._apply_editor_theme())
+
+        ttk.Button(editor_controls, text="保存模板", command=self._save_template_changes).pack(side=tk.RIGHT)
+
+        self.editor_text = tk.Text(right, wrap=tk.NONE)
+        self.editor_text.pack(fill=tk.BOTH, expand=True, pady=(5, 5))
+        self._apply_editor_theme()
+
+        builder_frame = ttk.Labelframe(right, text="POC 快速生成")
+        builder_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
+
+        self.builder_id = tk.StringVar()
+        self.builder_name = tk.StringVar()
+        self.builder_severity = tk.StringVar(value="medium")
+        self.builder_method = tk.StringVar(value="GET")
+        self.builder_path = tk.StringVar(value="/")
+        self.builder_words = tk.StringVar(value="success")
+
+        ttk.Label(builder_frame, text="模板 ID").grid(row=0, column=0, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_id, width=20).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Label(builder_frame, text="名称").grid(row=0, column=2, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_name, width=25).grid(row=0, column=3, padx=5, pady=2)
+
+        ttk.Label(builder_frame, text="等级").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(builder_frame, values=["info", "low", "medium", "high", "critical"], textvariable=self.builder_severity, width=10).grid(row=1, column=1, padx=5, pady=2)
+        ttk.Label(builder_frame, text="方法").grid(row=1, column=2, sticky="w")
+        ttk.Combobox(builder_frame, values=["GET", "POST", "PUT", "DELETE", "PATCH"], textvariable=self.builder_method, width=10).grid(row=1, column=3, padx=5, pady=2)
+
+        ttk.Label(builder_frame, text="路径").grid(row=2, column=0, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_path, width=20).grid(row=2, column=1, padx=5, pady=2)
+        ttk.Label(builder_frame, text="匹配关键词 (逗号分隔)").grid(row=2, column=2, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_words, width=25).grid(row=2, column=3, padx=5, pady=2)
+
+        ttk.Button(builder_frame, text="生成并打开", command=self._build_template).grid(row=3, column=0, columnspan=4, pady=5, sticky="ew")
+
+    def _build_settings_tab(self) -> None:
+        frame = ttk.Frame(self.settings_frame)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        fofa_frame = ttk.Labelframe(frame, text="FOFA 认证")
+        fofa_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(fofa_frame, text="邮箱").grid(row=0, column=0, sticky="w")
+        self.setting_email = tk.StringVar()
+        ttk.Entry(fofa_frame, textvariable=self.setting_email, width=30).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Label(fofa_frame, text="API Key").grid(row=0, column=2, sticky="w")
+        self.setting_key = tk.StringVar()
+        ttk.Entry(fofa_frame, textvariable=self.setting_key, width=50, show="*").grid(row=0, column=3, padx=5, pady=2)
+
+        nuclei_frame = ttk.Labelframe(frame, text="Nuclei 设置")
+        nuclei_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(nuclei_frame, text="Nuclei 路径").grid(row=0, column=0, sticky="w")
+        self.setting_binary = tk.StringVar()
+        ttk.Entry(nuclei_frame, textvariable=self.setting_binary, width=40).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Button(nuclei_frame, text="浏览", command=self._choose_binary).grid(row=0, column=2, padx=5)
+
+        ttk.Label(nuclei_frame, text="默认速率").grid(row=1, column=0, sticky="w")
+        self.setting_rate = tk.IntVar()
+        ttk.Spinbox(nuclei_frame, from_=1, to=1000, textvariable=self.setting_rate, width=8).grid(row=1, column=1, sticky="w", padx=5)
+        ttk.Label(nuclei_frame, text="默认并发").grid(row=1, column=2, sticky="w")
+        self.setting_concurrency = tk.IntVar()
+        ttk.Spinbox(nuclei_frame, from_=1, to=500, textvariable=self.setting_concurrency, width=8).grid(row=1, column=3, sticky="w", padx=5)
+
+        dns_frame = ttk.Labelframe(frame, text="DNSLOG 与代理")
+        dns_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(dns_frame, text="DNSLOG 服务").grid(row=0, column=0, sticky="w")
+        self.setting_dnslog = tk.StringVar()
+        ttk.Entry(dns_frame, textvariable=self.setting_dnslog, width=40).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Label(dns_frame, text="HTTP 代理").grid(row=1, column=0, sticky="w")
+        self.setting_http_proxy = tk.StringVar()
+        ttk.Entry(dns_frame, textvariable=self.setting_http_proxy, width=40).grid(row=1, column=1, padx=5, pady=2)
+        ttk.Label(dns_frame, text="HTTPS 代理").grid(row=1, column=2, sticky="w")
+        self.setting_https_proxy = tk.StringVar()
+        ttk.Entry(dns_frame, textvariable=self.setting_https_proxy, width=40).grid(row=1, column=3, padx=5, pady=2)
+        ttk.Label(dns_frame, text="SOCKS5 代理").grid(row=2, column=0, sticky="w")
+        self.setting_socks_proxy = tk.StringVar()
+        ttk.Entry(dns_frame, textvariable=self.setting_socks_proxy, width=40).grid(row=2, column=1, padx=5, pady=2)
+
+        template_frame = ttk.Labelframe(frame, text="模板存储")
+        template_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(template_frame, text="目录").grid(row=0, column=0, sticky="w")
+        self.setting_templates_dir = tk.StringVar()
+        ttk.Entry(template_frame, textvariable=self.setting_templates_dir, width=60).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Button(template_frame, text="选择", command=self._choose_templates_dir).grid(row=0, column=2, padx=5)
+
+        ttk.Button(frame, text="保存设置", command=self._save_settings).pack(anchor=tk.E, pady=10)
+
+    # ------------------------------------------------------------------ FOFA
+    def _update_fofa_fields(self) -> None:
+        fields = [field.strip() for field in self.fofa_fields_var.get().split(",") if field.strip()]
+        self.config_data.fofa_fields = fields
+        save_config(self.config_data)
+        self._refresh_fofa_columns()
+        messagebox.showinfo("提示", "字段已更新")
+
+    def _refresh_fofa_columns(self) -> None:
+        columns = self.config_data.fofa_fields
+        self.fofa_tree.config(columns=columns)
+        for column in columns:
+            self.fofa_tree.heading(column, text=column)
+            self.fofa_tree.column(column, width=120, stretch=True)
+
+    def execute_fofa_query(self) -> None:
+        expression = self.fofa_query_var.get().strip()
+        if not expression:
+            messagebox.showwarning("提示", "请输入查询语句")
+            return
+
+        try:
+            self.fofa_client = FofaClient(
+                self.setting_email.get() or self.config_data.fofa_email,
+                self.setting_key.get() or self.config_data.fofa_key,
+                verify_ssl=self.config_data.verify_ssl,
+                timeout=self.config_data.request_timeout,
+            )
+        except ValueError:
+            messagebox.showerror("错误", "请先在设置中配置 FOFA 凭据")
+            return
+
+        try:
+            results = self.fofa_client.search(
+                expression,
+                page=1,
+                size=self.fofa_size_var.get(),
+                fields=self.config_data.fofa_fields,
+            )
+        except (FofaError, RequestError) as exc:
+            messagebox.showerror("FOFA 查询失败", str(exc))
+            return
+
+        self._fofa_results = results
+        self.fofa_tree.delete(*self.fofa_tree.get_children())
+
+        if not results:
+            messagebox.showinfo("提示", "未查询到任何资产")
+            return
+
+        for idx, result in enumerate(results):
+            row = [result.get(column, "") for column in self.config_data.fofa_fields]
+            self.fofa_tree.insert("", tk.END, iid=str(idx), values=row)
+
+    def _append_selected_to_targets(self) -> None:
+        selected = self.fofa_tree.selection()
+        hosts = []
+        for item in selected:
+            idx = int(item)
+            try:
+                result = self._fofa_results[idx]
+            except IndexError:
+                continue
+            host = result.get("host") or result.get("ip")
+            if host:
+                hosts.append(host)
+        if not hosts:
+            messagebox.showinfo("提示", "请选择至少一个结果")
+            return
+        existing = self.targets_text.get("1.0", tk.END).strip().splitlines()
+        merged = existing + hosts
+        merged = [line for line in merged if line]
+        self.targets_text.delete("1.0", tk.END)
+        self.targets_text.insert(tk.END, "\n".join(sorted(set(merged))))
+
+    def _export_fofa_results(self) -> None:
+        if not self._fofa_results:
+            messagebox.showwarning("提示", "当前没有 FOFA 结果")
+            return
+        file_path = filedialog.asksaveasfilename(
+            title="导出 FOFA 结果",
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+        )
+        if not file_path:
+            return
+        rows = [
+            [result.get(field, "") for field in self.config_data.fofa_fields]
+            for result in self._fofa_results
+        ]
+        try:
+            write_table_to_excel(self.config_data.fofa_fields, rows, Path(file_path))
+            messagebox.showinfo("提示", "导出成功")
+        except Exception as exc:
+            messagebox.showerror("导出失败", str(exc))
+
+    # ------------------------------------------------------------------ Scan
+    def _start_scan(self) -> None:
+        targets = [line.strip() for line in self.targets_text.get("1.0", tk.END).splitlines() if line.strip()]
+        if not targets:
+            messagebox.showwarning("提示", "请输入扫描目标")
+            return
+
+        selected_templates = [self.template_tree.item(item, "text") for item in self.template_tree.selection()]
+        if not selected_templates:
+            messagebox.showwarning("提示", "请选择至少一个模板")
+            return
+
+        severity = self.severity_var.get() or None
+        task_name = f"Task-{len(self._tasks_cache) + 1}"
+        task = self.task_manager.create_task(
+            name=task_name,
+            targets=targets,
+            templates=selected_templates,
+            binary=self.config_data.nuclei_binary,
+            rate_limit=self.rate_limit_var.get(),
+            concurrency=self.concurrency_var.get(),
+            severity=severity,
+            dnslog_server=self.dnslog_var.get() or None,
+            proxy=self.proxy_var.get() or None,
+        )
+        self._tasks_cache[task.identifier] = task
+        messagebox.showinfo("提示", f"任务 {task.name} 已启动")
+
+    def _schedule_task_update(self, task: NucleiTask) -> None:
+        self.after(0, lambda: self._on_task_update(task))
+
+    def _on_task_update(self, task: NucleiTask) -> None:
+        self._tasks_cache[task.identifier] = task
+        if self.task_tree.exists(task.identifier):
+            self.task_tree.item(
+                task.identifier,
+                values=self._task_row(task),
+            )
+        else:
+            self.task_tree.insert("", tk.END, iid=task.identifier, values=self._task_row(task))
+        if self._selected_task and self._selected_task.identifier == task.identifier:
+            self._selected_task = task
+            self._refresh_task_results(task)
+
+    def _task_row(self, task: NucleiTask) -> List[str]:
+        return [
+            task.name,
+            task.status,
+            f"{int(task.progress * 100)}%",
+            str(len(task.results)),
+            format_timestamp(task.started_at),
+            format_timestamp(task.finished_at),
+        ]
+
+    def _stop_selected_task(self) -> None:
+        selected = self.task_tree.selection()
+        if not selected:
+            messagebox.showinfo("提示", "请选择任务")
+            return
+        task_id = selected[0]
+        self.task_manager.stop_task(task_id)
+        messagebox.showinfo("提示", "停止指令已发送")
+
+    def _clear_finished_tasks(self) -> None:
+        self.task_manager.clear_finished()
+        for task_id in list(self._tasks_cache.keys()):
+            task = self._tasks_cache[task_id]
+            if task.status in {"completed", "error"}:
+                self._tasks_cache.pop(task_id)
+                if self.task_tree.exists(task_id):
+                    self.task_tree.delete(task_id)
+
+    def _export_task_results(self) -> None:
+        selected = self.task_tree.selection()
+        if not selected:
+            messagebox.showwarning("提示", "请选择任务")
+            return
+        task_id = selected[0]
+        task = self._tasks_cache.get(task_id)
+        if not task:
+            messagebox.showerror("错误", "未找到任务信息")
+            return
+        if not task.results:
+            messagebox.showinfo("提示", "该任务尚无结果")
+            return
+        file_path = filedialog.asksaveasfilename(
+            title="导出任务结果",
+            defaultextension=".xlsx",
+            filetypes=[("Excel", "*.xlsx")],
+        )
+        if not file_path:
+            return
+        try:
+            export_results_to_excel(task.results, Path(file_path))
+            messagebox.showinfo("提示", "导出成功")
+        except Exception as exc:
+            messagebox.showerror("导出失败", str(exc))
+
+    def _on_task_selected(self, _event: tk.Event) -> None:
+        selected = self.task_tree.selection()
+        if not selected:
+            return
+        task_id = selected[0]
+        task = self._tasks_cache.get(task_id)
+        if task:
+            self._selected_task = task
+            self._refresh_task_results(task)
+
+    def _refresh_task_results(self, task: NucleiTask) -> None:
+        self.result_tree.delete(*self.result_tree.get_children())
+        for idx, result in enumerate(task.results):
+            info = result.info
+            self.result_tree.insert(
+                "",
+                tk.END,
+                iid=str(idx),
+                values=(
+                    result.template_id,
+                    info.get("severity", ""),
+                    result.matched_at,
+                    result.raw.get("host", ""),
+                ),
+            )
+        summary = json.dumps(task.results[-1].raw, indent=2, ensure_ascii=False) if task.results else ""
+        self.result_detail.delete("1.0", tk.END)
+        self.result_detail.insert(tk.END, summary)
+
+    def _on_result_selected(self, _event: tk.Event) -> None:
+        if not self._selected_task:
+            return
+        selection = self.result_tree.selection()
+        if not selection:
+            return
+        idx = int(selection[0])
+        try:
+            result = self._selected_task.results[idx]
+        except IndexError:
+            return
+        payload = json.dumps(result.raw, indent=2, ensure_ascii=False)
+        self.result_detail.delete("1.0", tk.END)
+        self.result_detail.insert(tk.END, payload)
+
+    # ---------------------------------------------------------------- Templates
+    def _refresh_template_list(self) -> None:
+        for tree in (self.template_tree, self.manage_template_tree):
+            tree.delete(*tree.get_children())
+        templates = self.template_manager.list_templates()
+        for template in templates:
+            values = (template.severity, ",".join(template.tags))
+            self.template_tree.insert("", tk.END, iid=template.path.as_posix(), text=str(template.path), values=values)
+            self.manage_template_tree.insert("", tk.END, iid=template.path.as_posix(), text=template.template_id, values=values)
+
+    def _on_manage_template_selected(self, _event: tk.Event) -> None:
+        selection = self.manage_template_tree.selection()
+        if not selection:
+            return
+        template_path = Path(selection[0])
+        try:
+            content = template_path.read_text(encoding="utf-8")
+        except Exception as exc:
+            messagebox.showerror("错误", str(exc))
+            return
+        self.editor_text.delete("1.0", tk.END)
+        self.editor_text.insert(tk.END, content)
+        self.editor_text.edit_reset()
+
+    def _delete_selected_template(self) -> None:
+        selection = self.manage_template_tree.selection()
+        if not selection:
+            messagebox.showinfo("提示", "请选择模板")
+            return
+        template_path = Path(selection[0])
+        template_id = template_path.stem
+        if messagebox.askyesno("确认", f"确定删除模板 {template_id}?"):
+            try:
+                self.template_manager.delete_template(template_id)
+                self._refresh_template_list()
+                self.editor_text.delete("1.0", tk.END)
+            except TemplateError as exc:
+                messagebox.showerror("错误", str(exc))
+
+    def _import_templates_from_directory(self) -> None:
+        directory = filedialog.askdirectory(title="选择模板目录")
+        if not directory:
+            return
+        try:
+            imported = self.template_manager.import_templates(Path(directory))
+            messagebox.showinfo("导入完成", f"成功导入 {len(imported)} 个模板")
+            self._refresh_template_list()
+        except TemplateError as exc:
+            messagebox.showerror("导入失败", str(exc))
+
+    def _save_template_changes(self) -> None:
+        selection = self.manage_template_tree.selection()
+        if not selection:
+            messagebox.showwarning("提示", "请选择模板")
+            return
+        template_path = Path(selection[0])
+        content = self.editor_text.get("1.0", tk.END).strip()
+        if not content:
+            messagebox.showwarning("提示", "模板内容不能为空")
+            return
+        template_id = template_path.stem
+        try:
+            self.template_manager.save_template(template_id, content)
+            self._refresh_template_list()
+            messagebox.showinfo("提示", "保存成功")
+        except TemplateError as exc:
+            messagebox.showerror("错误", str(exc))
+
+    def _create_template_from_builder(self) -> None:
+        template_id = self.builder_id.get() or f"custom-{len(self.template_manager.list_templates()) + 1}"
+        name = self.builder_name.get() or "自定义模板"
+        severity = self.builder_severity.get() or "medium"
+        method = self.builder_method.get() or "GET"
+        path_value = self.builder_path.get() or "/"
+        words = [word.strip() for word in self.builder_words.get().split(",") if word.strip()]
+        body = build_basic_template(template_id, name, severity, method, path_value, words)
+        try:
+            self.template_manager.create_template(name, severity, words, body, template_id=template_id)
+        except TemplateError as exc:
+            messagebox.showerror("错误", str(exc))
+            return
+        self._refresh_template_list()
+        self.editor_text.delete("1.0", tk.END)
+        self.editor_text.insert(tk.END, body)
+        messagebox.showinfo("提示", "模板已生成")
+
+    def _build_template(self) -> None:
+        template_id = self.builder_id.get() or "example"
+        name = self.builder_name.get() or "示例模板"
+        severity = self.builder_severity.get() or "medium"
+        method = self.builder_method.get() or "GET"
+        path_value = self.builder_path.get() or "/"
+        words = [word.strip() for word in self.builder_words.get().split(",") if word.strip()]
+        body = build_basic_template(template_id, name, severity, method, path_value, words)
+        self.editor_text.delete("1.0", tk.END)
+        self.editor_text.insert(tk.END, body)
+
+    def _apply_editor_theme(self) -> None:
+        theme = self.editor_theme_var.get()
+        font_size = self.editor_font_size.get()
+        if theme == "dark":
+            self.editor_text.configure(background="#1e1e1e", foreground="#dcdcdc", insertbackground="#ffffff")
+        else:
+            self.editor_text.configure(background="#ffffff", foreground="#000000", insertbackground="#000000")
+        self.editor_text.configure(font=("Courier New", font_size))
+
+    # ---------------------------------------------------------------- Settings
+    def _load_settings_into_ui(self) -> None:
+        self.setting_email.set(self.config_data.fofa_email)
+        self.setting_key.set(self.config_data.fofa_key)
+        self.setting_binary.set(self.config_data.nuclei_binary)
+        self.setting_rate.set(self.config_data.nuclei_rate_limit)
+        self.setting_concurrency.set(self.config_data.nuclei_concurrency)
+        self.setting_dnslog.set(self.config_data.dnslog_server)
+        self.setting_http_proxy.set(self.config_data.proxy.http or "")
+        self.setting_https_proxy.set(self.config_data.proxy.https or "")
+        self.setting_socks_proxy.set(self.config_data.proxy.socks5 or "")
+        self.setting_templates_dir.set(str(self.config_data.templates_dir))
+
+    def _save_settings(self) -> None:
+        self.config_data.fofa_email = self.setting_email.get().strip()
+        self.config_data.fofa_key = self.setting_key.get().strip()
+        self.config_data.nuclei_binary = self.setting_binary.get().strip() or "nuclei"
+        self.config_data.nuclei_rate_limit = self.setting_rate.get()
+        self.config_data.nuclei_concurrency = self.setting_concurrency.get()
+        self.config_data.dnslog_server = self.setting_dnslog.get().strip()
+        self.config_data.proxy.http = self.setting_http_proxy.get().strip() or None
+        self.config_data.proxy.https = self.setting_https_proxy.get().strip() or None
+        self.config_data.proxy.socks5 = self.setting_socks_proxy.get().strip() or None
+        templates_dir = Path(self.setting_templates_dir.get()).expanduser()
+        self.config_data.templates_dir = templates_dir
+        save_config(self.config_data)
+        self.template_manager = TemplateManager(templates_dir)
+        self._refresh_template_list()
+        messagebox.showinfo("提示", "设置已保存")
+
+    def _choose_templates_dir(self) -> None:
+        directory = filedialog.askdirectory(title="选择模板目录")
+        if directory:
+            self.setting_templates_dir.set(directory)
+
+    def _choose_binary(self) -> None:
+        binary = filedialog.askopenfilename(title="选择 nuclei 可执行文件")
+        if binary:
+            self.setting_binary.set(binary)
+
+
+__all__ = ["WaverlyApp"]
+
