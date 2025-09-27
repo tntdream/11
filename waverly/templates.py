@@ -18,6 +18,7 @@ class TemplateMetadata:
     tags: List[str]
     path: Path
     description: str = ""
+    author: str = ""
 
     def to_dict(self) -> Dict[str, str]:
         return {
@@ -27,6 +28,7 @@ class TemplateMetadata:
             "tags": ",".join(self.tags),
             "path": str(self.path),
             "description": self.description,
+            "author": self.author,
         }
 
 
@@ -128,6 +130,7 @@ class TemplateManager:
         severity = info.get("severity", "info")
         tags = _ensure_list(info.get("tags", []))
         description = info.get("description", "")
+        author = _strip_optional(info.get("author"))
         return TemplateMetadata(
             template_id=template_id,
             name=name,
@@ -135,6 +138,7 @@ class TemplateManager:
             tags=tags,
             path=path or self.directory / f"{template_id}.yaml",
             description=description,
+            author=author or "",
         )
 
 
@@ -164,6 +168,14 @@ def _strip_quotes(value: str) -> str:
     ):
         return value[1:-1]
     return value
+
+
+def _strip_optional(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
 
 
 def _extract_section(lines: List[str], section: str) -> Dict[str, object]:

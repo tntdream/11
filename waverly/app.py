@@ -10,7 +10,7 @@ from .config import UserConfig, load_config, save_config
 from .fofa import FofaClient, FofaError, FofaResult, RequestError
 from .nuclei import NucleiTask
 from .tasks import TaskManager
-from .templates import TemplateError, TemplateManager, build_basic_template
+from .templates import TemplateError, TemplateManager, TemplateMetadata, build_basic_template
 from .utils import export_results_to_excel, format_timestamp, write_table_to_excel
 
 
@@ -32,6 +32,7 @@ class WaverlyApp(tk.Tk):
         self._fofa_results: List[FofaResult] = []
         self._selected_task: Optional[NucleiTask] = None
         self._tasks_cache: dict[str, NucleiTask] = {}
+        self._template_cache: List[TemplateMetadata] = []
 
         self._build_ui()
         self._refresh_template_list()
@@ -207,32 +208,103 @@ class WaverlyApp(tk.Tk):
         self.result_detail.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
     def _build_templates_tab(self) -> None:
-        container = ttk.Panedwindow(self.templates_frame, orient=tk.HORIZONTAL)
+        container = ttk.Panedwindow(self.templates_frame, orient=tk.VERTICAL)
         container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        left = ttk.Frame(container)
-        right = ttk.Frame(container)
-        container.add(left, weight=1)
-        container.add(right, weight=2)
+        list_panel = ttk.Frame(container)
+        detail_panel = ttk.Frame(container)
+        container.add(list_panel, weight=3)
+        container.add(detail_panel, weight=2)
 
-        ttk.Label(left, text="已导入模板").pack(anchor=tk.W)
-        columns = ("severity", "tags")
-        self.manage_template_tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
+        toolbar = ttk.Frame(list_panel)
+        toolbar.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Button(toolbar, text="刷新", command=self._refresh_template_list).pack(side=tk.LEFT)
+        ttk.Button(toolbar, text="导入模板", command=self._import_templates_from_directory).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="删除选中", command=self._delete_selected_template).pack(side=tk.LEFT, padx=5)
+        ttk.Button(toolbar, text="生成模板", command=self._create_template_from_builder).pack(side=tk.LEFT, padx=5)
+
+        self.template_search_var = tk.StringVar()
+        search_entry = ttk.Entry(toolbar, textvariable=self.template_search_var, width=28)
+        search_entry.pack(side=tk.RIGHT, padx=(5, 0))
+        search_entry.bind("<Return>", lambda _event: self._on_template_search())
+        ttk.Button(toolbar, text="清除", command=self._reset_template_search).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(toolbar, text="搜索", command=self._on_template_search).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Label(toolbar, text="搜索模板").pack(side=tk.RIGHT, padx=(0, 5))
+
+        tree_frame = ttk.Frame(list_panel)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+
+        columns = ("name", "template_id", "severity", "author", "tags", "description")
+        self.manage_template_tree = ttk.Treeview(
+            tree_frame,
+            columns=columns,
+            show="headings",
+            selectmode="browse",
+        )
+        self.manage_template_tree.heading("name", text="模板名称")
+        self.manage_template_tree.heading("template_id", text="模板ID")
         self.manage_template_tree.heading("severity", text="等级")
+        self.manage_template_tree.heading("author", text="作者")
         self.manage_template_tree.heading("tags", text="标签")
+        self.manage_template_tree.heading("description", text="描述")
+        self.manage_template_tree.column("name", width=220, anchor=tk.W)
+        self.manage_template_tree.column("template_id", width=180, anchor=tk.W)
         self.manage_template_tree.column("severity", width=80, anchor=tk.CENTER)
-        self.manage_template_tree.column("tags", width=200)
-        self.manage_template_tree.pack(fill=tk.BOTH, expand=True)
+        self.manage_template_tree.column("author", width=120, anchor=tk.W)
+        self.manage_template_tree.column("tags", width=200, anchor=tk.W)
+        self.manage_template_tree.column("description", width=260, anchor=tk.W)
         self.manage_template_tree.bind("<<TreeviewSelect>>", self._on_manage_template_selected)
 
-        button_row = ttk.Frame(left)
-        button_row.pack(fill=tk.X, pady=5)
-        ttk.Button(button_row, text="新建模板", command=self._create_template_from_builder).pack(side=tk.LEFT)
-        ttk.Button(button_row, text="删除", command=self._delete_selected_template).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_row, text="导入目录", command=self._import_templates_from_directory).pack(side=tk.LEFT)
+        tree_frame.rowconfigure(0, weight=1)
+        tree_frame.columnconfigure(0, weight=1)
+        self.manage_template_tree.grid(row=0, column=0, sticky="nsew")
 
-        editor_controls = ttk.Frame(right)
-        editor_controls.pack(fill=tk.X)
+        y_scroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.manage_template_tree.yview)
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        x_scroll = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.manage_template_tree.xview)
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        self.manage_template_tree.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
+
+        info_frame = ttk.Labelframe(detail_panel, text="模板信息")
+        info_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
+
+        self.template_name_var = tk.StringVar()
+        self.template_id_var = tk.StringVar()
+        self.template_severity_var = tk.StringVar()
+        self.template_author_var = tk.StringVar()
+        self.template_tags_var = tk.StringVar()
+        self.template_path_var = tk.StringVar()
+        self.template_description_var = tk.StringVar()
+
+        ttk.Label(info_frame, text="名称:").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        ttk.Label(info_frame, textvariable=self.template_name_var).grid(row=0, column=1, sticky="w", padx=5, pady=2)
+        ttk.Label(info_frame, text="等级:").grid(row=0, column=2, sticky="w", padx=5, pady=2)
+        ttk.Label(info_frame, textvariable=self.template_severity_var).grid(row=0, column=3, sticky="w", padx=5, pady=2)
+
+        ttk.Label(info_frame, text="模板ID:").grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        ttk.Label(info_frame, textvariable=self.template_id_var).grid(row=1, column=1, sticky="w", padx=5, pady=2)
+        ttk.Label(info_frame, text="作者:").grid(row=1, column=2, sticky="w", padx=5, pady=2)
+        ttk.Label(info_frame, textvariable=self.template_author_var).grid(row=1, column=3, sticky="w", padx=5, pady=2)
+
+        ttk.Label(info_frame, text="标签:").grid(row=2, column=0, sticky="nw", padx=5, pady=2)
+        ttk.Label(info_frame, textvariable=self.template_tags_var, wraplength=460, justify=tk.LEFT).grid(row=2, column=1, sticky="w", padx=5, pady=2)
+        ttk.Label(info_frame, text="路径:").grid(row=2, column=2, sticky="nw", padx=5, pady=2)
+        ttk.Label(info_frame, textvariable=self.template_path_var, wraplength=260, justify=tk.LEFT).grid(row=2, column=3, sticky="w", padx=5, pady=2)
+
+        ttk.Label(info_frame, text="描述:").grid(row=3, column=0, sticky="nw", padx=5, pady=2)
+        self.template_description_label = ttk.Label(
+            info_frame,
+            textvariable=self.template_description_var,
+            wraplength=720,
+            justify=tk.LEFT,
+        )
+        self.template_description_label.grid(row=3, column=1, columnspan=3, sticky="we", padx=5, pady=2)
+        info_frame.columnconfigure(1, weight=1)
+        info_frame.columnconfigure(3, weight=1)
+
+        editor_controls = ttk.Frame(detail_panel)
+        editor_controls.pack(fill=tk.X, padx=5)
         ttk.Label(editor_controls, text="主题").pack(side=tk.LEFT)
         self.editor_theme_var = tk.StringVar(value="light")
         theme_box = ttk.Combobox(editor_controls, values=["light", "dark"], textvariable=self.editor_theme_var, width=8)
@@ -247,11 +319,11 @@ class WaverlyApp(tk.Tk):
 
         ttk.Button(editor_controls, text="保存模板", command=self._save_template_changes).pack(side=tk.RIGHT)
 
-        self.editor_text = tk.Text(right, wrap=tk.NONE)
-        self.editor_text.pack(fill=tk.BOTH, expand=True, pady=(5, 5))
+        self.editor_text = tk.Text(detail_panel, wrap=tk.NONE)
+        self.editor_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=(5, 5))
         self._apply_editor_theme()
 
-        builder_frame = ttk.Labelframe(right, text="POC 快速生成")
+        builder_frame = ttk.Labelframe(detail_panel, text="POC 快速生成")
         builder_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
 
         self.builder_id = tk.StringVar()
@@ -569,19 +641,95 @@ class WaverlyApp(tk.Tk):
 
     # ---------------------------------------------------------------- Templates
     def _refresh_template_list(self) -> None:
-        for tree in (self.template_tree, self.manage_template_tree):
-            tree.delete(*tree.get_children())
+        self.template_tree.delete(*self.template_tree.get_children())
         templates = self.template_manager.list_templates()
+        self._template_cache = templates
         for template in templates:
             values = (template.severity, ",".join(template.tags))
-            self.template_tree.insert("", tk.END, iid=template.path.as_posix(), text=str(template.path), values=values)
-            self.manage_template_tree.insert("", tk.END, iid=template.path.as_posix(), text=template.template_id, values=values)
+            self.template_tree.insert(
+                "",
+                tk.END,
+                iid=template.path.as_posix(),
+                text=str(template.path),
+                values=values,
+            )
+        self._apply_template_filter()
 
-    def _on_manage_template_selected(self, _event: tk.Event) -> None:
+    def _apply_template_filter(self) -> None:
+        selected = self.manage_template_tree.selection()
+        selected_id = selected[0] if selected else None
+        self.manage_template_tree.delete(*self.manage_template_tree.get_children())
+        query = self.template_search_var.get().strip().lower()
+
+        for template in self._template_cache:
+            haystack = " ".join(
+                [
+                    template.name,
+                    template.template_id,
+                    template.severity,
+                    template.author or "",
+                    ",".join(template.tags),
+                    template.description or "",
+                ]
+            ).lower()
+            if query and query not in haystack:
+                continue
+
+            description = (template.description or "").replace("\n", " ").strip()
+            if len(description) > 120:
+                description = f"{description[:117]}..."
+            values = (
+                template.name,
+                template.template_id,
+                template.severity,
+                template.author or "",
+                ",".join(template.tags),
+                description,
+            )
+            self.manage_template_tree.insert(
+                "",
+                tk.END,
+                iid=template.path.as_posix(),
+                values=values,
+            )
+
+        if selected_id and self.manage_template_tree.exists(selected_id):
+            self.manage_template_tree.selection_set(selected_id)
+            self.manage_template_tree.see(selected_id)
+        else:
+            self.manage_template_tree.selection_remove(self.manage_template_tree.selection())
+            self._clear_template_details()
+
+        if not self.manage_template_tree.get_children():
+            self._clear_template_details()
+
+    def _on_template_search(self) -> None:
+        self._apply_template_filter()
+
+        # Automatically focus results when filtering down to a single entry.
+        children = self.manage_template_tree.get_children()
+        if len(children) == 1:
+            self.manage_template_tree.selection_set(children[0])
+            self.manage_template_tree.see(children[0])
+            self._on_manage_template_selected(None)
+
+    def _reset_template_search(self) -> None:
+        if self.template_search_var.get():
+            self.template_search_var.set("")
+        self._apply_template_filter()
+
+    def _on_manage_template_selected(self, _event: Optional[tk.Event]) -> None:
         selection = self.manage_template_tree.selection()
         if not selection:
             return
         template_path = Path(selection[0])
+        metadata = self._get_template_metadata_by_path(template_path)
+        if metadata:
+            self._update_template_info(metadata)
+        else:
+            self.template_name_var.set(template_path.stem)
+            self.template_id_var.set(template_path.stem)
+            self.template_path_var.set(str(template_path))
         try:
             content = template_path.read_text(encoding="utf-8")
         except Exception as exc:
@@ -590,6 +738,32 @@ class WaverlyApp(tk.Tk):
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert(tk.END, content)
         self.editor_text.edit_reset()
+
+    def _update_template_info(self, metadata: TemplateMetadata) -> None:
+        self.template_name_var.set(metadata.name)
+        self.template_id_var.set(metadata.template_id)
+        self.template_severity_var.set(metadata.severity or "-")
+        self.template_author_var.set(metadata.author or "未提供")
+        tags = ", ".join(metadata.tags)
+        self.template_tags_var.set(tags or "-")
+        self.template_path_var.set(str(metadata.path))
+        description = (metadata.description or "").strip()
+        self.template_description_var.set(description or "无描述")
+
+    def _clear_template_details(self) -> None:
+        self.template_name_var.set("")
+        self.template_id_var.set("")
+        self.template_severity_var.set("")
+        self.template_author_var.set("")
+        self.template_tags_var.set("")
+        self.template_path_var.set("")
+        self.template_description_var.set("")
+
+    def _get_template_metadata_by_path(self, template_path: Path) -> Optional[TemplateMetadata]:
+        for template in self._template_cache:
+            if template.path == template_path:
+                return template
+        return None
 
     def _delete_selected_template(self) -> None:
         selection = self.manage_template_tree.selection()
@@ -603,6 +777,7 @@ class WaverlyApp(tk.Tk):
                 self.template_manager.delete_template(template_id)
                 self._refresh_template_list()
                 self.editor_text.delete("1.0", tk.END)
+                self._clear_template_details()
             except TemplateError as exc:
                 messagebox.showerror("错误", str(exc))
 

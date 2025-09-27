@@ -17,6 +17,7 @@ def test_create_and_list_templates(tmp_path):
     templates = manager.list_templates()
     assert len(templates) == 1
     assert templates[0].template_id == "demo"
+    assert templates[0].author == "waverly"
 
 
 def test_save_template_updates_content(tmp_path):
