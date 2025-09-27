@@ -18,7 +18,10 @@ class TemplateMetadata:
     tags: List[str]
     path: Path
     description: str = ""
+<<<<<<< HEAD
     author: str = ""
+=======
+>>>>>>> origin/main
 
     def to_dict(self) -> Dict[str, str]:
         return {
@@ -28,7 +31,10 @@ class TemplateMetadata:
             "tags": ",".join(self.tags),
             "path": str(self.path),
             "description": self.description,
+<<<<<<< HEAD
             "author": self.author,
+=======
+>>>>>>> origin/main
         }
 
 
@@ -130,7 +136,10 @@ class TemplateManager:
         severity = info.get("severity", "info")
         tags = _ensure_list(info.get("tags", []))
         description = info.get("description", "")
+<<<<<<< HEAD
         author = _strip_optional(info.get("author"))
+=======
+>>>>>>> origin/main
         return TemplateMetadata(
             template_id=template_id,
             name=name,
@@ -138,7 +147,10 @@ class TemplateManager:
             tags=tags,
             path=path or self.directory / f"{template_id}.yaml",
             description=description,
+<<<<<<< HEAD
             author=author or "",
+=======
+>>>>>>> origin/main
         )
 
 
@@ -170,6 +182,7 @@ def _strip_quotes(value: str) -> str:
     return value
 
 
+<<<<<<< HEAD
 def _strip_optional(value: object) -> Optional[str]:
     if value is None:
         return None
@@ -178,6 +191,8 @@ def _strip_optional(value: object) -> Optional[str]:
     return str(value).strip()
 
 
+=======
+>>>>>>> origin/main
 def _extract_section(lines: List[str], section: str) -> Dict[str, object]:
     result: Dict[str, object] = {}
     section_prefix = f"{section}:"
@@ -229,8 +244,11 @@ def build_basic_template(
     method: str,
     path: str,
     matcher_words: Iterable[str],
+<<<<<<< HEAD
     *,
     raw_request: Optional[str] = None,
+=======
+>>>>>>> origin/main
 ) -> str:
     words = list(matcher_words)
     word_lines = "\n".join(f"          - {_quote(word)}" for word in words) or "          - success"
@@ -251,10 +269,13 @@ def build_basic_template(
         "        words:",
         word_lines,
     ]
+<<<<<<< HEAD
     if raw_request:
         lines.extend(["    raw:", "      - |"])
         for raw_line in raw_request.splitlines():
             lines.append(f"        {raw_line}")
+=======
+>>>>>>> origin/main
     return "\n".join(lines)
 
 

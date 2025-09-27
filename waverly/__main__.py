@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+<<<<<<< HEAD
 import argparse
 import os
 import sys
@@ -67,4 +68,16 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+=======
+from .app import WaverlyApp
+
+
+def main() -> None:
+    app = WaverlyApp()
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
+>>>>>>> origin/main
 

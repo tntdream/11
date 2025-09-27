@@ -17,7 +17,10 @@ def test_create_and_list_templates(tmp_path):
     templates = manager.list_templates()
     assert len(templates) == 1
     assert templates[0].template_id == "demo"
+<<<<<<< HEAD
     assert templates[0].author == "waverly"
+=======
+>>>>>>> origin/main
 
 
 def test_save_template_updates_content(tmp_path):
@@ -43,6 +46,7 @@ def test_import_templates_skips_duplicates(tmp_path):
     assert len(imported_again) == 0
 
 
+<<<<<<< HEAD
 def test_build_basic_template_supports_raw_block():
     raw = "GET / HTTP/1.1\nHost: example.com"
     body = build_basic_template(
@@ -58,3 +62,5 @@ def test_build_basic_template_supports_raw_block():
     assert "GET / HTTP/1.1" in body
 
 
+=======
+>>>>>>> origin/main

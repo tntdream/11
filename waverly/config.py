@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+<<<<<<< HEAD
 import os
+=======
+>>>>>>> origin/main
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -9,9 +12,12 @@ from typing import Any, Dict, Iterable, Optional
 CONFIG_DIR = Path.home() / ".waverly"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
+<<<<<<< HEAD
 ENV_FOFA_EMAIL = "WAVERLY_FOFA_EMAIL"
 ENV_FOFA_KEY = "WAVERLY_FOFA_KEY"
 
+=======
+>>>>>>> origin/main
 
 def _ensure_directory(path: Path) -> None:
     if not path.exists():
@@ -56,6 +62,7 @@ class UserConfig:
     fofa_email: str = ""
     fofa_key: str = ""
     fofa_fields: list[str] = field(
+<<<<<<< HEAD
         default_factory=lambda: [
             "url",
             "host",
@@ -65,6 +72,9 @@ class UserConfig:
             "server",
             "banner",
         ]
+=======
+        default_factory=lambda: ["host", "ip", "port", "title", "server", "banner"]
+>>>>>>> origin/main
     )
     default_query_size: int = 100
     dnslog_server: str = ""
@@ -94,11 +104,15 @@ class UserConfig:
         config = cls(
             fofa_email=data.get("fofa_email", ""),
             fofa_key=data.get("fofa_key", ""),
+<<<<<<< HEAD
             fofa_fields=(
                 merge_fields(cls().fofa_fields, list(data.get("fofa_fields", [])))
                 if data.get("fofa_fields")
                 else cls().fofa_fields
             ),
+=======
+            fofa_fields=list(data.get("fofa_fields", [])) or cls().fofa_fields,
+>>>>>>> origin/main
             default_query_size=int(data.get("default_query_size", 100)),
             dnslog_server=data.get("dnslog_server", ""),
             dnslog_token=data.get("dnslog_token", ""),
@@ -123,7 +137,11 @@ def load_config(path: Optional[Path] = None) -> UserConfig:
     if not config_path.exists():
         config = UserConfig(config_path=config_path)
         ensure_runtime_directories(config)
+<<<<<<< HEAD
         return apply_env_overrides(config)
+=======
+        return config
+>>>>>>> origin/main
 
     with config_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
@@ -132,7 +150,11 @@ def load_config(path: Optional[Path] = None) -> UserConfig:
     if path is not None:
         config.config_path = path
     ensure_runtime_directories(config)
+<<<<<<< HEAD
     return apply_env_overrides(config)
+=======
+    return config
+>>>>>>> origin/main
 
 
 def save_config(config: UserConfig, path: Optional[Path] = None) -> None:
@@ -176,6 +198,7 @@ def merge_fields(current_fields: Iterable[str], new_fields: Iterable[str]) -> li
             seen.add(field_name)
     return merged
 
+<<<<<<< HEAD
 
 def apply_env_overrides(config: UserConfig) -> UserConfig:
     """Update configuration using environment variables when present."""
@@ -190,3 +213,5 @@ def apply_env_overrides(config: UserConfig) -> UserConfig:
 
     return config
 
+=======
+>>>>>>> origin/main

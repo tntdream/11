@@ -10,7 +10,11 @@ from .config import UserConfig, load_config, save_config
 from .fofa import FofaClient, FofaError, FofaResult, RequestError
 from .nuclei import NucleiTask
 from .tasks import TaskManager
+<<<<<<< HEAD
 from .templates import TemplateError, TemplateManager, TemplateMetadata, build_basic_template
+=======
+from .templates import TemplateError, TemplateManager, build_basic_template
+>>>>>>> origin/main
 from .utils import export_results_to_excel, format_timestamp, write_table_to_excel
 
 
@@ -32,7 +36,10 @@ class WaverlyApp(tk.Tk):
         self._fofa_results: List[FofaResult] = []
         self._selected_task: Optional[NucleiTask] = None
         self._tasks_cache: dict[str, NucleiTask] = {}
+<<<<<<< HEAD
         self._template_cache: List[TemplateMetadata] = []
+=======
+>>>>>>> origin/main
 
         self._build_ui()
         self._refresh_template_list()
@@ -87,12 +94,16 @@ class WaverlyApp(tk.Tk):
 
         ttk.Label(query_row, text="返回数量:").pack(side=tk.LEFT)
         self.fofa_size_var = tk.IntVar(value=self.config_data.default_query_size)
+<<<<<<< HEAD
         size_spin = ttk.Spinbox(
             query_row,
             from_=1,
             textvariable=self.fofa_size_var,
             width=6,
         )
+=======
+        size_spin = ttk.Spinbox(query_row, from_=1, to=10000, textvariable=self.fofa_size_var, width=6)
+>>>>>>> origin/main
         size_spin.pack(side=tk.LEFT, padx=(5, 0))
         ttk.Button(query_row, text="执行查询", command=self.execute_fofa_query).pack(side=tk.LEFT, padx=5)
 
@@ -108,14 +119,21 @@ class WaverlyApp(tk.Tk):
         self.fofa_tree = ttk.Treeview(frame, columns=columns, show="headings", height=7)
         for column in columns:
             self.fofa_tree.heading(column, text=column)
+<<<<<<< HEAD
             width = 220 if column == "url" else 120
             self.fofa_tree.column(column, width=width, stretch=True)
+=======
+            self.fofa_tree.column(column, width=120, stretch=True)
+>>>>>>> origin/main
         self.fofa_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
 
         action_row = ttk.Frame(frame)
         action_row.pack(fill=tk.X, padx=10, pady=(0, 5))
         ttk.Button(action_row, text="添加选中到扫描目标", command=self._append_selected_to_targets).pack(side=tk.LEFT)
+<<<<<<< HEAD
         ttk.Button(action_row, text="导入全部结果", command=self._append_all_to_targets).pack(side=tk.LEFT, padx=5)
+=======
+>>>>>>> origin/main
         ttk.Button(action_row, text="导出结果为Excel", command=self._export_fofa_results).pack(side=tk.LEFT, padx=5)
 
     def _build_scan_section(self, parent: ttk.Frame) -> None:
@@ -206,10 +224,13 @@ class WaverlyApp(tk.Tk):
         self.result_tree.bind("<<TreeviewSelect>>", self._on_result_selected)
         self.result_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 5))
 
+<<<<<<< HEAD
         result_actions = ttk.Frame(frame)
         result_actions.pack(fill=tk.X, padx=10, pady=(0, 5))
         ttk.Button(result_actions, text="查看请求/响应", command=self._show_result_http_details).pack(side=tk.LEFT)
 
+=======
+>>>>>>> origin/main
         self.result_detail = tk.Text(frame, height=8)
         self.result_detail.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
@@ -217,6 +238,7 @@ class WaverlyApp(tk.Tk):
         container = ttk.Panedwindow(self.templates_frame, orient=tk.HORIZONTAL)
         container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
+<<<<<<< HEAD
         list_panel = ttk.Frame(container)
         detail_panel = ttk.Frame(container)
         container.add(list_panel, weight=2)
@@ -290,6 +312,31 @@ class WaverlyApp(tk.Tk):
 
         editor_controls = ttk.Frame(editor_panel)
         editor_controls.pack(fill=tk.X, padx=10, pady=(10, 5))
+=======
+        left = ttk.Frame(container)
+        right = ttk.Frame(container)
+        container.add(left, weight=1)
+        container.add(right, weight=2)
+
+        ttk.Label(left, text="已导入模板").pack(anchor=tk.W)
+        columns = ("severity", "tags")
+        self.manage_template_tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
+        self.manage_template_tree.heading("severity", text="等级")
+        self.manage_template_tree.heading("tags", text="标签")
+        self.manage_template_tree.column("severity", width=80, anchor=tk.CENTER)
+        self.manage_template_tree.column("tags", width=200)
+        self.manage_template_tree.pack(fill=tk.BOTH, expand=True)
+        self.manage_template_tree.bind("<<TreeviewSelect>>", self._on_manage_template_selected)
+
+        button_row = ttk.Frame(left)
+        button_row.pack(fill=tk.X, pady=5)
+        ttk.Button(button_row, text="新建模板", command=self._create_template_from_builder).pack(side=tk.LEFT)
+        ttk.Button(button_row, text="删除", command=self._delete_selected_template).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_row, text="导入目录", command=self._import_templates_from_directory).pack(side=tk.LEFT)
+
+        editor_controls = ttk.Frame(right)
+        editor_controls.pack(fill=tk.X)
+>>>>>>> origin/main
         ttk.Label(editor_controls, text="主题").pack(side=tk.LEFT)
         self.editor_theme_var = tk.StringVar(value="light")
         theme_box = ttk.Combobox(editor_controls, values=["light", "dark"], textvariable=self.editor_theme_var, width=8)
@@ -304,6 +351,7 @@ class WaverlyApp(tk.Tk):
 
         ttk.Button(editor_controls, text="保存模板", command=self._save_template_changes).pack(side=tk.RIGHT)
 
+<<<<<<< HEAD
         editor_text_frame = ttk.Frame(editor_panel)
         editor_text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
         self.editor_text = tk.Text(editor_text_frame, wrap=tk.NONE)
@@ -362,6 +410,14 @@ class WaverlyApp(tk.Tk):
         builder_preview = ttk.Frame(builder_container, padding=10)
         builder_container.add(builder_form, weight=2)
         builder_container.add(builder_preview, weight=3)
+=======
+        self.editor_text = tk.Text(right, wrap=tk.NONE)
+        self.editor_text.pack(fill=tk.BOTH, expand=True, pady=(5, 5))
+        self._apply_editor_theme()
+
+        builder_frame = ttk.Labelframe(right, text="POC 快速生成")
+        builder_frame.pack(fill=tk.X, padx=5, pady=(0, 5))
+>>>>>>> origin/main
 
         self.builder_id = tk.StringVar()
         self.builder_name = tk.StringVar()
@@ -369,6 +425,7 @@ class WaverlyApp(tk.Tk):
         self.builder_method = tk.StringVar(value="GET")
         self.builder_path = tk.StringVar(value="/")
         self.builder_words = tk.StringVar(value="success")
+<<<<<<< HEAD
         self.builder_use_raw = tk.BooleanVar(value=False)
 
         basic_frame = ttk.LabelFrame(builder_form, text="模板信息")
@@ -420,6 +477,25 @@ class WaverlyApp(tk.Tk):
         self.builder_preview_text.configure(state=tk.DISABLED)
 
         self._apply_editor_theme()
+=======
+
+        ttk.Label(builder_frame, text="模板 ID").grid(row=0, column=0, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_id, width=20).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Label(builder_frame, text="名称").grid(row=0, column=2, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_name, width=25).grid(row=0, column=3, padx=5, pady=2)
+
+        ttk.Label(builder_frame, text="等级").grid(row=1, column=0, sticky="w")
+        ttk.Combobox(builder_frame, values=["info", "low", "medium", "high", "critical"], textvariable=self.builder_severity, width=10).grid(row=1, column=1, padx=5, pady=2)
+        ttk.Label(builder_frame, text="方法").grid(row=1, column=2, sticky="w")
+        ttk.Combobox(builder_frame, values=["GET", "POST", "PUT", "DELETE", "PATCH"], textvariable=self.builder_method, width=10).grid(row=1, column=3, padx=5, pady=2)
+
+        ttk.Label(builder_frame, text="路径").grid(row=2, column=0, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_path, width=20).grid(row=2, column=1, padx=5, pady=2)
+        ttk.Label(builder_frame, text="匹配关键词 (逗号分隔)").grid(row=2, column=2, sticky="w")
+        ttk.Entry(builder_frame, textvariable=self.builder_words, width=25).grid(row=2, column=3, padx=5, pady=2)
+
+        ttk.Button(builder_frame, text="生成并打开", command=self._build_template).grid(row=3, column=0, columnspan=4, pady=5, sticky="ew")
+>>>>>>> origin/main
 
     def _build_settings_tab(self) -> None:
         frame = ttk.Frame(self.settings_frame)
@@ -485,8 +561,12 @@ class WaverlyApp(tk.Tk):
         self.fofa_tree.config(columns=columns)
         for column in columns:
             self.fofa_tree.heading(column, text=column)
+<<<<<<< HEAD
             width = 220 if column == "url" else 120
             self.fofa_tree.column(column, width=width, stretch=True)
+=======
+            self.fofa_tree.column(column, width=120, stretch=True)
+>>>>>>> origin/main
 
     def execute_fofa_query(self) -> None:
         expression = self.fofa_query_var.get().strip()
@@ -512,23 +592,31 @@ class WaverlyApp(tk.Tk):
                 size=self.fofa_size_var.get(),
                 fields=self.config_data.fofa_fields,
             )
+<<<<<<< HEAD
         except (FofaError, RequestError, ValueError) as exc:
+=======
+        except (FofaError, RequestError) as exc:
+>>>>>>> origin/main
             messagebox.showerror("FOFA 查询失败", str(exc))
             return
 
         self._fofa_results = results
         self.fofa_tree.delete(*self.fofa_tree.get_children())
+<<<<<<< HEAD
 
         if not results:
             messagebox.showinfo("提示", "未查询到任何资产")
             return
 
+=======
+>>>>>>> origin/main
         for idx, result in enumerate(results):
             row = [result.get(column, "") for column in self.config_data.fofa_fields]
             self.fofa_tree.insert("", tk.END, iid=str(idx), values=row)
 
     def _append_selected_to_targets(self) -> None:
         selected = self.fofa_tree.selection()
+<<<<<<< HEAD
         indices: List[int] = []
         for item in selected:
             try:
@@ -554,10 +642,16 @@ class WaverlyApp(tk.Tk):
         for idx in indices:
             if idx < 0:
                 continue
+=======
+        hosts = []
+        for item in selected:
+            idx = int(item)
+>>>>>>> origin/main
             try:
                 result = self._fofa_results[idx]
             except IndexError:
                 continue
+<<<<<<< HEAD
             url = result.get("url")
             if not url:
                 continue
@@ -577,6 +671,19 @@ class WaverlyApp(tk.Tk):
                 seen.add(item)
         self.targets_text.delete("1.0", tk.END)
         self.targets_text.insert(tk.END, "\n".join(combined))
+=======
+            host = result.get("host") or result.get("ip")
+            if host:
+                hosts.append(host)
+        if not hosts:
+            messagebox.showinfo("提示", "请选择至少一个结果")
+            return
+        existing = self.targets_text.get("1.0", tk.END).strip().splitlines()
+        merged = existing + hosts
+        merged = [line for line in merged if line]
+        self.targets_text.delete("1.0", tk.END)
+        self.targets_text.insert(tk.END, "\n".join(sorted(set(merged))))
+>>>>>>> origin/main
 
     def _export_fofa_results(self) -> None:
         if not self._fofa_results:
@@ -741,6 +848,7 @@ class WaverlyApp(tk.Tk):
         self.result_detail.delete("1.0", tk.END)
         self.result_detail.insert(tk.END, payload)
 
+<<<<<<< HEAD
     def _show_result_http_details(self) -> None:
         if not self._selected_task:
             messagebox.showinfo("提示", "请先选择一个任务和结果条目")
@@ -923,10 +1031,24 @@ class WaverlyApp(tk.Tk):
         self._apply_template_filter()
 
     def _on_manage_template_selected(self, _event: Optional[tk.Event]) -> None:
+=======
+    # ---------------------------------------------------------------- Templates
+    def _refresh_template_list(self) -> None:
+        for tree in (self.template_tree, self.manage_template_tree):
+            tree.delete(*tree.get_children())
+        templates = self.template_manager.list_templates()
+        for template in templates:
+            values = (template.severity, ",".join(template.tags))
+            self.template_tree.insert("", tk.END, iid=template.path.as_posix(), text=str(template.path), values=values)
+            self.manage_template_tree.insert("", tk.END, iid=template.path.as_posix(), text=template.template_id, values=values)
+
+    def _on_manage_template_selected(self, _event: tk.Event) -> None:
+>>>>>>> origin/main
         selection = self.manage_template_tree.selection()
         if not selection:
             return
         template_path = Path(selection[0])
+<<<<<<< HEAD
         metadata = self._get_template_metadata_by_path(template_path)
         if metadata:
             self._update_template_info(metadata)
@@ -936,6 +1058,8 @@ class WaverlyApp(tk.Tk):
             self.template_path_var.set(str(template_path))
         if hasattr(self, "template_notebook") and hasattr(self, "template_editor_tab"):
             self.template_notebook.select(self.template_editor_tab)
+=======
+>>>>>>> origin/main
         try:
             content = template_path.read_text(encoding="utf-8")
         except Exception as exc:
@@ -944,6 +1068,7 @@ class WaverlyApp(tk.Tk):
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert(tk.END, content)
         self.editor_text.edit_reset()
+<<<<<<< HEAD
         self._update_builder_preview(content)
 
     def _update_template_info(self, metadata: TemplateMetadata) -> None:
@@ -972,6 +1097,8 @@ class WaverlyApp(tk.Tk):
             if template.path == template_path:
                 return template
         return None
+=======
+>>>>>>> origin/main
 
     def _delete_selected_template(self) -> None:
         selection = self.manage_template_tree.selection()
@@ -985,7 +1112,10 @@ class WaverlyApp(tk.Tk):
                 self.template_manager.delete_template(template_id)
                 self._refresh_template_list()
                 self.editor_text.delete("1.0", tk.END)
+<<<<<<< HEAD
                 self._clear_template_details()
+=======
+>>>>>>> origin/main
             except TemplateError as exc:
                 messagebox.showerror("错误", str(exc))
 
@@ -1025,6 +1155,7 @@ class WaverlyApp(tk.Tk):
         method = self.builder_method.get() or "GET"
         path_value = self.builder_path.get() or "/"
         words = [word.strip() for word in self.builder_words.get().split(",") if word.strip()]
+<<<<<<< HEAD
         raw_request = self._get_builder_raw_request()
         body = build_basic_template(
             template_id,
@@ -1035,6 +1166,9 @@ class WaverlyApp(tk.Tk):
             words,
             raw_request=raw_request,
         )
+=======
+        body = build_basic_template(template_id, name, severity, method, path_value, words)
+>>>>>>> origin/main
         try:
             self.template_manager.create_template(name, severity, words, body, template_id=template_id)
         except TemplateError as exc:
@@ -1043,7 +1177,10 @@ class WaverlyApp(tk.Tk):
         self._refresh_template_list()
         self.editor_text.delete("1.0", tk.END)
         self.editor_text.insert(tk.END, body)
+<<<<<<< HEAD
         self._update_builder_preview(body)
+=======
+>>>>>>> origin/main
         messagebox.showinfo("提示", "模板已生成")
 
     def _build_template(self) -> None:
@@ -1053,6 +1190,7 @@ class WaverlyApp(tk.Tk):
         method = self.builder_method.get() or "GET"
         path_value = self.builder_path.get() or "/"
         words = [word.strip() for word in self.builder_words.get().split(",") if word.strip()]
+<<<<<<< HEAD
         raw_request = self._get_builder_raw_request()
         body = build_basic_template(
             template_id,
@@ -1101,6 +1239,20 @@ class WaverlyApp(tk.Tk):
 
         if hasattr(self, "builder_raw_text"):
             self._apply_editor_theme_to_widget(self.builder_raw_text)
+=======
+        body = build_basic_template(template_id, name, severity, method, path_value, words)
+        self.editor_text.delete("1.0", tk.END)
+        self.editor_text.insert(tk.END, body)
+
+    def _apply_editor_theme(self) -> None:
+        theme = self.editor_theme_var.get()
+        font_size = self.editor_font_size.get()
+        if theme == "dark":
+            self.editor_text.configure(background="#1e1e1e", foreground="#dcdcdc", insertbackground="#ffffff")
+        else:
+            self.editor_text.configure(background="#ffffff", foreground="#000000", insertbackground="#000000")
+        self.editor_text.configure(font=("Courier New", font_size))
+>>>>>>> origin/main
 
     # ---------------------------------------------------------------- Settings
     def _load_settings_into_ui(self) -> None:

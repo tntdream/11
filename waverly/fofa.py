@@ -116,6 +116,7 @@ class FofaClient:
     def _parse_results(
         self, payload: Dict[str, any], fields: Optional[Iterable[str]]
     ) -> List[FofaResult]:
+<<<<<<< HEAD
         field_list = list(fields) if fields else list(payload.get("queryfield", []))
         results: List[FofaResult] = []
         for raw in payload.get("results", []):
@@ -139,16 +140,26 @@ class FofaClient:
 
             results.append(FofaResult(data))
 
+=======
+        field_list = list(fields) if fields else payload.get("queryfield", [])
+        results = []
+        for raw in payload.get("results", []):
+            data = {field_list[idx] if idx < len(field_list) else str(idx): value for idx, value in enumerate(raw)}
+            results.append(FofaResult(data))
+>>>>>>> origin/main
         return results
 
 
 def extract_hosts(results: Iterable[FofaResult]) -> List[str]:
     hosts: List[str] = []
     for result in results:
+<<<<<<< HEAD
         url = result.get("url")
         if url:
             hosts.append(str(url))
             continue
+=======
+>>>>>>> origin/main
         host = result.get("host") or result.get("ip")
         if host:
             hosts.append(str(host))

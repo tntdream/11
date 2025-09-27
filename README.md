@@ -17,10 +17,16 @@ Waverly 是一个面向攻防研究人员的跨平台桌面工具，集成了 FO
 ## 运行环境
 
 - Python 3.10+
+<<<<<<< HEAD
 - 依赖：`requests`（FOFA API 功能需要）
 - 开发/测试依赖：`pytest`
 - 系统内需预先安装 [Nuclei](https://github.com/projectdiscovery/nuclei) 可执行文件，并在设置页指向其路径。
 - FOFA API 需要合法账号与 API Key（可通过环境变量 `WAVERLY_FOFA_EMAIL` 与 `WAVERLY_FOFA_KEY` 预先配置，若界面已保存凭据则优先生效）。
+=======
+- 可选依赖：`requests`（启用 FOFA API 功能时建议安装）
+- 系统内需预先安装 [Nuclei](https://github.com/projectdiscovery/nuclei) 可执行文件，并在设置页指向其路径。
+- FOFA API 需要合法账号与 API Key。
+>>>>>>> origin/main
 
 安装依赖：
 
@@ -34,6 +40,7 @@ pip install -r requirements.txt
 python -m waverly
 ```
 
+<<<<<<< HEAD
 若在 Linux 服务器等无图形界面的环境中运行，可先执行：
 
 ```bash
@@ -42,6 +49,8 @@ python -m waverly --check
 
 以确认是否已提供可用的 DISPLAY；如未检测到，将给出友好的提示信息。
 
+=======
+>>>>>>> origin/main
 首次运行会在用户目录下生成 `~/.waverly/` 目录，用于持久化配置、缓存与模板。可在“系统设置”页调整模板目录后重新加载。
 
 ## 代码结构
@@ -62,7 +71,11 @@ waverly/
 
 ## 常见工作流
 
+<<<<<<< HEAD
 1. 在“系统设置”中配置 FOFA 邮箱 & API Key、Nuclei 路径、模板目录与代理（如果已设置 `WAVERLY_FOFA_EMAIL` / `WAVERLY_FOFA_KEY` 环境变量且当前字段为空会自动填充）。
+=======
+1. 在“系统设置”中配置 FOFA 邮箱 & API Key、Nuclei 路径、模板目录与代理。
+>>>>>>> origin/main
 2. 切换至“资产与扫描”页，输入 FOFA dork，查看结果并将选中资产加入目标列表。
 3. 选择需要联动的 POC 模板，设置速率、并发、DNSLOG、代理等参数，点击“启动扫描”。
 4. 在右侧任务面板实时查看进度、命中情况与原始数据，可随时停止任务或导出为 Excel。
